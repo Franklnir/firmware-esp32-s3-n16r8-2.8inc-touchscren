@@ -1,0 +1,37 @@
+{
+    "type": "lcdwiki-es3c28p",
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "lcdwiki-es3c28p",
+            "sdkconfig_append": [
+                "CONFIG_LANGUAGE_EN_US=y",
+                "CONFIG_LV_USE_KEYBOARD=y",
+                "CONFIG_BT_ENABLED=y",
+                "CONFIG_BT_BLUEDROID_ENABLED=y",
+                "CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST=y",
+                "CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY=y",
+                "CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y",
+                "CONFIG_BT_BLE_42_FEATURES_SUPPORTED=y",
+                "CONFIG_BT_BLE_50_FEATURES_SUPPORTED=n",
+                "CONFIG_BT_ACL_CONNECTIONS=2",
+                "CONFIG_BT_CTRL_BLE_MAX_ACT=3",
+                "CONFIG_LV_USE_LODEPNG=n",
+                "CONFIG_LV_FONT_MONTSERRAT_10=y",
+                "CONFIG_LV_FONT_MONTSERRAT_12=y",
+                "CONFIG_LV_FONT_MONTSERRAT_48=n",
+                "CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y",
+                "CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y",
+                "CONFIG_SR_WN_WN9_HIJASON_TTS2=y",
+                "CONFIG_SR_WN_WN9_HILEXIN=y",
+                "CONFIG_SR_WN_WN9_HIESP=y",
+                "CONFIG_SR_WN_WN9_ALEXA=y",
+                "CONFIG_SR_WN_WN9_NIHAOXIAOZHI_TTS=y",
+                "CONFIG_SR_WN_WN9_HIANDY_TTS2=y",
+                "CONFIG_SR_WN_WN9_HIJOLLY_TTS2=y",
+                "CONFIG_SR_WN_WN9_HIJOY_TTS=y",
+                "CONFIG_SR_WN_WN9_SOPHIA_TTS=y"
+            ]
+        }
+    ]
+}

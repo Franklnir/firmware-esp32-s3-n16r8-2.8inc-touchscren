@@ -1,0 +1,218 @@
+{
+  "title": "XiaoZhi ESP32 - GPIO Pin Dataset",
+  "author": "Hermes Agent",
+  "elements": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "XiaoZhi ESP32 - GPIO Pin Dataset"
+    },
+    {
+      "type": "paragraph",
+      "text": "Dokumen ini berisi mapping GPIO pin untuk semua board bread-compact di repository xiaozhi-esp32-main."
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "1. bread-compact-esp32 (ESP32 Generic)"
+    },
+    {
+      "type": "paragraph",
+      "text": "Board ESP32 paling basic, mendukung Simplex dan Duplex I2S mode."
+    },
+    {
+      "type": "table",
+      "headers": ["Kategori", "Fungsi", "GPIO Pin"],
+      "rows": [
+        ["Audio MIC (Simplex)", "WS (Word Select)", "GPIO 25"],
+        ["Audio MIC (Simplex)", "SCK (Serial Clock)", "GPIO 26"],
+        ["Audio MIC (Simplex)", "DIN (Data In)", "GPIO 32"],
+        ["Audio SPK (Simplex)", "DOUT (Data Out)", "GPIO 33"],
+        ["Audio SPK (Simplex)", "BCLK (Bit Clock)", "GPIO 14"],
+        ["Audio SPK (Simplex)", "LRCK (Left/Right Clock)", "GPIO 27"],
+        ["Audio (Duplex)", "WS", "GPIO 4"],
+        ["Audio (Duplex)", "BCLK", "GPIO 5"],
+        ["Audio (Duplex)", "DIN", "GPIO 6"],
+        ["Audio (Duplex)", "DOUT", "GPIO 7"],
+        ["Button", "BOOT_BUTTON", "GPIO 0"],
+        ["Button", "TOUCH_BUTTON", "GPIO 5"],
+        ["Button", "ASR_BUTTON", "GPIO 19"],
+        ["LED", "BUILTIN_LED", "GPIO 2"],
+        ["4G Modem (ML307)", "RX", "GPIO 16"],
+        ["4G Modem (ML307)", "TX", "GPIO 17"],
+        ["OLED Display (I2C)", "SDA", "GPIO 4"],
+        ["OLED Display (I2C)", "SCL", "GPIO 15"],
+        ["MCP Test", "LAMP_GPIO", "GPIO 18"]
+      ]
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "2. bread-compact-wifi (ESP32-S3 WiFi Only)"
+    },
+    {
+      "type": "paragraph",
+      "text": "Board ESP32-S3 dengan WiFi, tanpa modem selular."
+    },
+    {
+      "type": "table",
+      "headers": ["Kategori", "Fungsi", "GPIO Pin"],
+      "rows": [
+        ["Audio MIC", "WS (Word Select)", "GPIO 4"],
+        ["Audio MIC", "SCK (Serial Clock)", "GPIO 5"],
+        ["Audio MIC", "DIN (Data In)", "GPIO 6"],
+        ["Audio SPK", "DOUT (Data Out)", "GPIO 7"],
+        ["Audio SPK", "BCLK (Bit Clock)", "GPIO 15"],
+        ["Audio SPK", "LRCK (Left/Right Clock)", "GPIO 16"],
+        ["LED", "BUILTIN_LED", "GPIO 48"],
+        ["Button", "BOOT_BUTTON", "GPIO 0"],
+        ["Button", "TOUCH_BUTTON", "GPIO 47"],
+        ["Button", "VOLUME_UP", "GPIO 40"],
+        ["Button", "VOLUME_DOWN", "GPIO 39"],
+        ["OLED Display (I2C)", "SDA", "GPIO 41"],
+        ["OLED Display (I2C)", "SCL", "GPIO 42"],
+        ["MCP Test", "LAMP_GPIO", "GPIO 18"]
+      ]
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "3. bread-compact-ml307 (ESP32-S3 + 4G ML307)"
+    },
+    {
+      "type": "paragraph",
+      "text": "Board ESP32-S3 dengan modem 4G ML307."
+    },
+    {
+      "type": "table",
+      "headers": ["Kategori", "Fungsi", "GPIO Pin"],
+      "rows": [
+        ["Audio MIC", "WS", "GPIO 4"],
+        ["Audio MIC", "SCK", "GPIO 5"],
+        ["Audio MIC", "DIN", "GPIO 6"],
+        ["Audio SPK", "DOUT", "GPIO 7"],
+        ["Audio SPK", "BCLK", "GPIO 15"],
+        ["Audio SPK", "LRCK", "GPIO 16"],
+        ["LED", "BUILTIN_LED", "GPIO 48"],
+        ["Button", "BOOT_BUTTON", "GPIO 0"],
+        ["Button", "TOUCH_BUTTON", "GPIO 47"],
+        ["Button", "VOLUME_UP", "GPIO 40"],
+        ["Button", "VOLUME_DOWN", "GPIO 39"],
+        ["OLED Display (I2C)", "SDA", "GPIO 41"],
+        ["OLED Display (I2C)", "SCL", "GPIO 42"],
+        ["4G Modem (ML307)", "RX", "GPIO 11"],
+        ["4G Modem (ML307)", "TX", "GPIO 12"],
+        ["MCP Test", "LAMP_GPIO", "GPIO 18"]
+      ]
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "4. bread-compact-nt26 (ESP32-S3 + Modem NT26)"
+    },
+    {
+      "type": "paragraph",
+      "text": "Board ESP32-S3 dengan modem NT26."
+    },
+    {
+      "type": "table",
+      "headers": ["Kategori", "Fungsi", "GPIO Pin"],
+      "rows": [
+        ["Audio MIC", "WS", "GPIO 4"],
+        ["Audio MIC", "SCK", "GPIO 5"],
+        ["Audio MIC", "DIN", "GPIO 6"],
+        ["Audio SPK", "DOUT", "GPIO 7"],
+        ["Audio SPK", "BCLK", "GPIO 15"],
+        ["Audio SPK", "LRCK", "GPIO 16"],
+        ["LED", "BUILTIN_LED", "GPIO 48"],
+        ["Button", "BOOT_BUTTON", "GPIO 0"],
+        ["Button", "TOUCH_BUTTON", "GPIO 47"],
+        ["Button", "VOLUME_UP", "GPIO 40"],
+        ["Button", "VOLUME_DOWN", "GPIO 39"],
+        ["OLED Display (I2C)", "SDA", "GPIO 41"],
+        ["OLED Display (I2C)", "SCL", "GPIO 42"],
+        ["Modem NT26", "DTR", "GPIO 9"],
+        ["Modem NT26", "RI", "GPIO 10"],
+        ["Modem NT26", "RX", "GPIO 11"],
+        ["Modem NT26", "TX", "GPIO 12"],
+        ["MCP Test", "LAMP_GPIO", "GPIO 18"]
+      ]
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "5. esp32s3-cam-st7789 (ESP32-S3 CAM + ST7789 1.3\" 240x240)"
+    },
+    {
+      "type": "paragraph",
+      "text": "Board ESP32-S3 N16R8 dengan kamera OV2640 dan display ST7789 1.3 inch 7-pin (240x240)."
+    },
+    {
+      "type": "table",
+      "headers": ["Kategori", "Fungsi", "GPIO Pin"],
+      "rows": [
+        ["Audio MIC (I2S)", "WS (Word Select)", "GPIO 1"],
+        ["Audio MIC (I2S)", "SCK (Serial Clock)", "GPIO 2"],
+        ["Audio MIC (I2S)", "DIN (Data In)", "GPIO 42"],
+        ["Audio SPK (I2S)", "DOUT (Data Out)", "GPIO 39"],
+        ["Audio SPK (I2S)", "BCLK (Bit Clock)", "GPIO 40"],
+        ["Audio SPK (I2S)", "LRCK (Left/Right Clock)", "GPIO 41"],
+        ["Button", "BOOT_BUTTON", "GPIO 0"],
+        ["Button", "WAKE_UP", "GPIO 14"],
+        ["Button", "ACTION", "GPIO 46"],
+        ["Battery ADC", "ADC (Voltage Divider)", "GPIO 3"],
+        ["LED", "BUILTIN_LED", "GPIO 48"],
+        ["Camera (OV2640)", "D0", "GPIO 11"],
+        ["Camera (OV2640)", "D1", "GPIO 9"],
+        ["Camera (OV2640)", "D2", "GPIO 8"],
+        ["Camera (OV2640)", "D3", "GPIO 10"],
+        ["Camera (OV2640)", "D4", "GPIO 12"],
+        ["Camera (OV2640)", "D5", "GPIO 18"],
+        ["Camera (OV2640)", "D6", "GPIO 17"],
+        ["Camera (OV2640)", "D7", "GPIO 16"],
+        ["Camera (OV2640)", "XCLK", "GPIO 15"],
+        ["Camera (OV2640)", "PCLK", "GPIO 13"],
+        ["Camera (OV2640)", "VSYNC", "GPIO 6"],
+        ["Camera (OV2640)", "HREF", "GPIO 7"],
+        ["Camera (OV2640)", "SIOC (I2C SCL)", "GPIO 5"],
+        ["Camera (OV2640)", "SIOD (I2C SDA)", "GPIO 4"],
+        ["Display ST7789 (SPI 7-pin)", "MOSI", "GPIO 20"],
+        ["Display ST7789 (SPI 7-pin)", "SCK", "GPIO 19"],
+        ["Display ST7789 (SPI 7-pin)", "DC", "GPIO 47"],
+        ["Display ST7789 (SPI 7-pin)", "RST", "GPIO 21"],
+        ["Display ST7789 (SPI 7-pin)", "CS", "GPIO_NC (not connected)"],
+        ["Display ST7789 (SPI 7-pin)", "Backlight", "GPIO 38"],
+        ["MCP Test", "LAMP_GPIO", "GPIO 14"]
+      ]
+    },
+    {
+      "type": "heading",
+      "level": 2,
+      "text": "Catatan Penting"
+    },
+    {
+      "type": "paragraph",
+      "text": "1. bread-compact-esp32 pakai chip ESP32 biasa (bukan S3), jadi GPIO 32/33 untuk MIC dan GPIO 25/26/27 untuk I2S speaker."
+    },
+    {
+      "type": "paragraph",
+      "text": "2. bread-compact-wifi/ml307/nt26 pakai ESP32-S3 dengan GPIO range berbeda (4-7, 15-16, 39-48)."
+    },
+    {
+      "type": "paragraph",
+      "text": "3. GPIO 0 (BOOT) dipakai di semua board sebagai boot button."
+    },
+    {
+      "type": "paragraph",
+      "text": "4. GPIO 18 dipakai sebagai LAMP_GPIO di semua board (MCP test tool)."
+    },
+    {
+      "type": "paragraph",
+      "text": "5. bread-compact-esp32 mendukung mode Duplex I2S (WS=4, BCLK=5, DIN=6, DOUT=7) sebagai alternatif Simplex."
+    },
+    {
+      "type": "paragraph",
+      "text": "6. Sample Rate: Input 16000 Hz, Output 24000 Hz untuk semua board."
+    }
+  ]
+}
