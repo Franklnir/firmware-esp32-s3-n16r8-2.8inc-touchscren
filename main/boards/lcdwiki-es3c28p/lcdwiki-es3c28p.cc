@@ -760,6 +760,7 @@ private:
     bool ble_music_flag_ = false;
     ChronchiNotification last_notif_;
     ChronchiNavigation last_nav_;
+    int64_t last_nav_timestamp_us_ = 0;
     ChronchiWeather last_weather_;
     ChronchiPhoneStatus last_phone_status_;
     ChronchiMusic last_music_;
@@ -1343,6 +1344,9 @@ private:
     }
 
     virtual bool IsChronchiMode() override {
+        if (chronchi_mode_ || nova_mode_) {
+            return true;
+        }
         Settings settings("chronchi", true);
         int mode = settings.GetInt("mode", 0); // Default: Mode 0 (XiaoZhi AI Assistant)
         return (mode == 1 || mode == 2);
@@ -1424,7 +1428,30 @@ private:
         });
 
         chronchi_ble_->setNotificationCallback([this](const ChronchiNotification& notif) {
-            ESP_LOGI(TAG, "Notification: %s - %s", notif.app.c_str(), notif.title.c_str());
+            ESP_LOGI(TAG, "Notification received: app='%s', title='%s', msg='%s'",
+                     notif.app.c_str(), notif.title.c_str(), notif.message.c_str());
+            last_notif_ = notif;
+            ble_notif_flag_ = true;
+
+            int64_t now_us = esp_timer_get_time();
+            bool nav_recently_updated = (last_nav_timestamp_us_ > 0) && ((now_us - last_nav_timestamp_us_) < 20000000ULL);
+            bool is_on_maps_screen = false;
+            if (nova_display_ && nova_display_->GetCurrentPage() == NovaDisplay::PAGE_NAV) {
+                is_on_maps_screen = true;
+            }
+            if (chronchi_display_ && chronchi_display_->getScreenState() == ChronchiDisplay::NAVIGATION) {
+                is_on_maps_screen = true;
+            }
+
+            if (nova_display_) {
+                nova_display_->UpdateNotif();
+                bool suppress_banner = last_nav_.active && nav_recently_updated && is_on_maps_screen;
+                if (!suppress_banner) {
+                    nova_display_->ShowNotificationBanner(notif.app, notif.title, notif.message);
+                } else {
+                    ESP_LOGI(TAG, "Suppressing notification banner during active Google Maps screen");
+                }
+            }
             if (chronchi_display_) {
                 chronchi_display_->showNotification(notif);
             }
@@ -1432,14 +1459,33 @@ private:
         });
 
         chronchi_ble_->setNavigationCallback([this](const ChronchiNavigation& nav) {
-            ESP_LOGI(TAG, "Navigation: %s - %s (%s)", nav.title.c_str(), nav.directions.c_str(), nav.distance.c_str());
+            ESP_LOGI(TAG, "Navigation: %s - %s (%s, ETA:%s, Dur:%s, Spd:%s, active=%d)",
+                     nav.title.c_str(), nav.directions.c_str(), nav.distance.c_str(),
+                     nav.eta.c_str(), nav.duration.c_str(), nav.speed.c_str(), (int)nav.active);
+            last_nav_ = nav;
+            if (nav.active) {
+                last_nav_timestamp_us_ = esp_timer_get_time();
+            } else {
+                last_nav_timestamp_us_ = 0;
+            }
+            ble_nav_flag_ = true;
+            if (nova_display_) {
+                nova_display_->UpdateNavData(nav.distance, nav.directions, nav.title, nav.duration, nav.eta, nav.speed, nav.active,
+                                             nav.maneuver, nav.hasIcon, nav.icon);
+            }
             if (chronchi_display_) {
                 chronchi_display_->showNavigation(nav);
             }
         });
 
         chronchi_ble_->setWeatherCallback([this](const ChronchiWeather& weather) {
-            ESP_LOGI(TAG, "Weather: %.0f°C %s", weather.temperatureC, weather.condition.c_str());
+            ESP_LOGI(TAG, "Weather: %.0f°C %s (loc=%s, H=%d, L=%d)", weather.temperatureC, weather.condition.c_str(),
+                     weather.location.c_str(), weather.highC, weather.lowC);
+            last_weather_ = weather;
+            ble_weather_flag_ = true;
+            if (nova_display_) {
+                nova_display_->UpdateWeatherFull(weather.temperatureC, weather.condition, weather.humidity, weather.location, weather.highC, weather.lowC);
+            }
             if (chronchi_display_) {
                 chronchi_display_->showWeather(weather);
                 chronchi_display_->updateHomeWeather(weather);
@@ -1448,6 +1494,11 @@ private:
 
         chronchi_ble_->setPhoneStatusCallback([this](const ChronchiPhoneStatus& status) {
             ESP_LOGI(TAG, "Phone: %d%% %s", status.batteryLevel, status.network.transport.c_str());
+            last_phone_status_ = status;
+            ble_status_flag_ = true;
+            if (nova_display_) {
+                nova_display_->UpdatePhoneStatus(status.batteryLevel, status.charging, status.network.transport);
+            }
             if (chronchi_display_) {
                 chronchi_display_->showPhoneStatus(status);
             }
@@ -1455,6 +1506,11 @@ private:
 
         chronchi_ble_->setMusicCallback([this](const ChronchiMusic& music) {
             ESP_LOGI(TAG, "Music: %s - %s", music.artist.c_str(), music.title.c_str());
+            last_music_ = music;
+            ble_music_flag_ = true;
+            if (nova_display_) {
+                nova_display_->UpdateBtMusicData(music.title, music.artist, music.state == 1);
+            }
             if (chronchi_display_) {
                 chronchi_display_->showMusic(music);
             }
@@ -1476,6 +1532,9 @@ private:
 
         chronchi_ble_->setFindWatchCallback([this](bool active) {
             ESP_LOGI(TAG, "Chronos Find Watch alert: %d", active);
+            if (nova_display_) {
+                nova_display_->ShowFindWatchAlert(active);
+            }
             if (chronchi_display_) {
                 chronchi_display_->showFindWatchAlert(active);
             }
@@ -1488,6 +1547,9 @@ private:
 
         chronchi_ble_->setCameraStateCallback([this](bool ready) {
             ESP_LOGI(TAG, "Chronos Camera state: %d", ready);
+            if (ready && nova_display_) {
+                nova_display_->ShowNotificationBanner("Kamera HP", "Kamera Terbuka", "Tekan tombol Shutter di Cari HP untuk memotret");
+            }
             if (chronchi_display_) {
                 chronchi_display_->showCameraPrompt(ready);
             }
@@ -1495,23 +1557,26 @@ private:
 
         chronchi_ble_->setRingerCallback([this](const std::string& caller, bool active) {
             ESP_LOGI(TAG, "Chronos Phone Call: '%s' active=%d", caller.c_str(), active);
+            if (nova_display_) {
+                nova_display_->ShowIncomingCallAlert(caller, active);
+            }
             if (active) {
                 if (chronchi_display_) {
                     chronchi_display_->showReminderAlert("📞 PANGGILAN MASUK", caller.empty() ? "Panggilan Suara" : caller.c_str());
                 }
                 ChronchiAlert::GetInstance().StartCallAlert();
             } else {
-                ChronchiAlert::GetInstance().StopAlert();
                 if (chronchi_display_ && chronchi_display_->getScreenState() == ChronchiDisplay::ALERT) {
                     chronchi_display_->showHome();
                 }
+                ChronchiAlert::GetInstance().StopAlert();
             }
         });
 
         chronchi_ble_->setAlarmCallback([this](uint8_t index, const ChronchiAlarm& alarm) {
             ESP_LOGI(TAG, "Chronos Alarm configured: #%d %02d:%02d en=%d rep=0x%02X",
                      index, alarm.hour, alarm.minute, alarm.enabled, alarm.repeat);
-            if (alarm.enabled && chronchi_display_) {
+            if (alarm.enabled) {
                 char buf[48];
                 snprintf(buf, sizeof(buf), "Alarm #%d aktif: %02d:%02d", index + 1, alarm.hour, alarm.minute);
                 ChronchiNotification notif;
@@ -1519,7 +1584,12 @@ private:
                 notif.title = "Alarm Disetel";
                 notif.message = buf;
                 notif.time = "";
-                chronchi_display_->showNotification(notif);
+                if (nova_display_) {
+                    nova_display_->ShowNotificationBanner(notif.app, notif.title, notif.message);
+                }
+                if (chronchi_display_) {
+                    chronchi_display_->showNotification(notif);
+                }
                 ChronchiAlert::GetInstance().VibrateNotification();
             }
         });
@@ -1528,11 +1598,14 @@ private:
             ESP_LOGI(TAG, "Chronos Reminder '%s': enabled=%d (%02d:%02d - %02d:%02d, int=%d)",
                      type.c_str(), reminder.enabled, reminder.startHour, reminder.startMinute,
                      reminder.endHour, reminder.endMinute, reminder.intervalMinutes);
-            if (reminder.enabled && chronchi_display_) {
-                if (type == "water") {
-                    chronchi_display_->showReminderAlert("💧 PENGINGAT MINUM", "Waktunya minum air putih!");
-                } else {
-                    chronchi_display_->showReminderAlert("🚶 PENGINGAT GERAK", "Waktunya berdiri & bergerak!");
+            if (reminder.enabled) {
+                const char* title = (type == "water") ? "💧 Pengingat Minum" : "🚶 Pengingat Gerak";
+                const char* msg = (type == "water") ? "Waktunya minum air putih!" : "Waktunya berdiri & bergerak sejenak!";
+                if (nova_display_) {
+                    nova_display_->ShowNotificationBanner(title, "Kesehatan", msg);
+                }
+                if (chronchi_display_) {
+                    chronchi_display_->showReminderAlert(title, msg);
                 }
                 ChronchiAlert::GetInstance().TriggerNotificationAlert();
             }
@@ -1548,10 +1621,121 @@ private:
 
         StartNetwork();
         InitializeBle();
+        YouTubeAudioPoller::GetInstance().Start();
 
         NovaCallbacks cb;
         cb.switch_mode = [this](int target_mode) {
             SwitchToMode(target_mode);
+        };
+        cb.launch_chronchi_screen = [this](int screen) {
+            StartChronchiWatch(screen);
+        };
+        cb.ble_music_control = [this](int cmd) {
+            if (chronchi_ble_) {
+                ChronosControl cc;
+                if (cmd == 1) cc = MUSIC_TOGGLE;
+                else if (cmd == 2) cc = MUSIC_PREVIOUS;
+                else if (cmd == 3) cc = MUSIC_NEXT;
+                else if (cmd == 4) cc = VOLUME_UP;
+                else if (cmd == 5) cc = VOLUME_DOWN;
+                else cc = static_cast<ChronosControl>(cmd);
+                chronchi_ble_->musicControl(cc);
+            }
+        };
+        cb.ble_find_phone = [this](bool ring) {
+            if (chronchi_ble_) {
+                chronchi_ble_->findPhone(ring);
+            }
+        };
+        cb.ble_capture_photo = [this]() -> bool {
+            if (chronchi_ble_) {
+                return chronchi_ble_->capturePhoto();
+            }
+            return false;
+        };
+        cb.ble_sync_request = [this]() {
+            if (chronchi_ble_) {
+                chronchi_ble_->syncRequest();
+            }
+        };
+        cb.get_ble_notif_count = [this]() -> int {
+            if (chronchi_ble_) {
+                return chronchi_ble_->getNotificationCount();
+            }
+            return (!last_notif_.app.empty() || !last_notif_.title.empty()) ? 1 : 0;
+        };
+        cb.get_ble_notif_at = [this](int idx, std::string& app, std::string& title, std::string& msg, std::string& time) -> bool {
+            if (chronchi_ble_ && idx < chronchi_ble_->getNotificationCount()) {
+                auto n = chronchi_ble_->getNotificationAt(idx);
+                app = n.app;
+                title = n.title;
+                msg = n.message;
+                time = n.time;
+                return true;
+            }
+            if (idx == 0 && (!last_notif_.app.empty() || !last_notif_.title.empty())) {
+                app = last_notif_.app;
+                title = last_notif_.title;
+                msg = last_notif_.message;
+                time = last_notif_.time;
+                return true;
+            }
+            return false;
+        };
+        cb.clear_ble_notifs = [this]() {
+            if (chronchi_ble_) {
+                chronchi_ble_->clearNotifications();
+            }
+            last_notif_ = {};
+        };
+        cb.get_ble_weather_full = [this](float& temp, std::string& cond, int& hum, std::string& loc, int& high, int& low) -> bool {
+            temp = last_weather_.temperatureC;
+            cond = last_weather_.condition;
+            hum = last_weather_.humidity;
+            loc = last_weather_.location;
+            high = last_weather_.highC;
+            low = last_weather_.lowC;
+            return last_weather_.valid || !cond.empty();
+        };
+        cb.get_ble_music = [this](std::string& title, std::string& artist, bool& playing) {
+            title = last_music_.title;
+            artist = last_music_.artist;
+            playing = (last_music_.state == 1);
+            return !title.empty();
+        };
+        cb.get_ble_nav = [this](std::string& dist, std::string& dir, std::string& title, std::string& dur, std::string& eta, std::string& spd, bool& active) {
+            dist = last_nav_.distance;
+            dir = last_nav_.directions;
+            title = last_nav_.title;
+            dur = last_nav_.duration;
+            eta = last_nav_.eta;
+            spd = last_nav_.speed;
+            active = last_nav_.active;
+            return active || !dir.empty();
+        };
+        cb.get_ble_nav_extra = [this](std::string& maneuver, bool& has_icon, const uint8_t*& icon_data) {
+            maneuver = last_nav_.maneuver;
+            has_icon = last_nav_.hasIcon;
+            icon_data = last_nav_.icon;
+        };
+        cb.get_ble_weather = [this](float& temp, std::string& cond, int& hum) {
+            temp = last_weather_.temperatureC;
+            cond = last_weather_.condition;
+            hum = last_weather_.humidity;
+            return last_weather_.valid || !cond.empty();
+        };
+        cb.get_ble_phone = [this](int& bat, bool& chg, std::string& net) {
+            bat = last_phone_status_.batteryLevel;
+            chg = last_phone_status_.charging;
+            net = last_phone_status_.network.transport;
+            return bat > 0;
+        };
+        cb.get_ble_notif = [this](std::string& app, std::string& title, std::string& msg, std::string& time) {
+            app = last_notif_.app;
+            title = last_notif_.title;
+            msg = last_notif_.message;
+            time = last_notif_.time;
+            return !app.empty() || !title.empty();
         };
         cb.set_brightness = [this](uint8_t b) {
             uint8_t pct = (b * 100) / 255;
@@ -1718,8 +1902,8 @@ private:
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 
-    void StartChronchiWatch() {
-        ESP_LOGI(TAG, "Starting Chronchi mode on LCDWiki ES3C28P (240x320)...");
+    void StartChronchiWatch(int initial_screen = 0) {
+        ESP_LOGI(TAG, "Starting Chronchi mode on LCDWiki ES3C28P (initial_screen=%d)...", initial_screen);
         chronchi_mode_ = true;
         nova_mode_ = false;
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -1742,7 +1926,11 @@ private:
         int cur_w = (rotation_ == 90 || rotation_ == 270) ? DISPLAY_HEIGHT : DISPLAY_WIDTH;
         int cur_h = (rotation_ == 90 || rotation_ == 270) ? DISPLAY_WIDTH : DISPLAY_HEIGHT;
         chronchi_display_->init(cur_w, cur_h);
-        chronchi_display_->showHome();
+        if (initial_screen > 0) {
+            chronchi_display_->setScreenState(static_cast<ChronchiDisplay::ScreenState>(initial_screen));
+        } else {
+            chronchi_display_->showHome();
+        }
         lvgl_port_unlock();
 
         // Update initial battery status immediately
@@ -1879,12 +2067,15 @@ private:
             battery_monitor_->SaveStateNow();
         }
 
+        bool was_in_chronchi_or_nova = (chronchi_mode_ || nova_mode_);
+
         // Mode 1 (Chronchi Watch) <-> Mode 2 (Nova OS):
         // 100% In-Memory Seamless Switching without reboot!
         // Bluetooth BLE and Wi-Fi stay active and connected continuously.
-        if (IsChronchiMode() && (target_mode == 1 || target_mode == 2)) {
+        // HANYA jika sebelumnya sudah aktif di mode Chronchi atau Nova OS (bukan dari mode XiaoZhi)!
+        if (was_in_chronchi_or_nova && (target_mode == 1 || target_mode == 2)) {
             if (target_mode == 1) {
-                StartChronchiWatch();
+                StartChronchiWatch(0);
             } else {
                 StartNovaOS();
             }

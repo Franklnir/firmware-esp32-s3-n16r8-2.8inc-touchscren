@@ -9,6 +9,14 @@
 #define TAG "AudioCodec"
 
 AudioCodec::AudioCodec() {
+    Settings settings("audio", false);
+    output_volume_ = settings.GetInt("output_volume", 75);
+    if (output_volume_ < 0) {
+        output_volume_ = 0;
+    }
+    if (output_volume_ > 100) {
+        output_volume_ = 100;
+    }
 }
 
 AudioCodec::~AudioCodec() {
@@ -37,6 +45,7 @@ void AudioCodec::Start() {
     }
 
     ESP_LOGI(TAG, "Audio codec started (volume=%d)", output_volume_);
+    SetOutputVolume(output_volume_);
 }
 
 void AudioCodec::SetOutputVolume(int volume) {

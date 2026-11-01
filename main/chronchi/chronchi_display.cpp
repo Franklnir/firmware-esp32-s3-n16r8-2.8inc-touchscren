@@ -2825,6 +2825,13 @@ void ChronchiDisplay::showNotification(const ChronchiNotification& notif) {
         return;
     }
 
+    // USER REQUIREMENT: Jika Google Maps sedang aktif atau berada di layar Navigasi, jangan tampilkan notifikasi popup dulu
+    if (google_maps_active_ || state_ == NAVIGATION) {
+        ESP_LOGI("Chronchi", "Google Maps aktif: notifikasi ditahan/diabaikan agar rute navigasi tidak terganggu");
+        lv_unlock();
+        return;
+    }
+
     if (notif_app_label_) {
         char abuf[64];
         snprintf(abuf, sizeof(abuf), "💬 %s", notif.app.empty() ? "NOTIFIKASI" : notif.app.c_str());

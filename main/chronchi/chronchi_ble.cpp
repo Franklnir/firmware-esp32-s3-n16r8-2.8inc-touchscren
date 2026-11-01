@@ -486,16 +486,20 @@ bool ChronchiBle::capturePhoto() {
 }
 
 void ChronchiBle::findPhone(bool state) {
-    if (_chronos_subscribed) {
-        uint8_t findCmd[] = {0xAB, 0x00, 0x04, 0xFF, 0x7D, 0x80, static_cast<uint8_t>(state ? 0x01 : 0x00)};
-        sendCommand(findCmd, sizeof(findCmd));
+    if (_connected) {
+        // Chronos / DaFit remote alert command: 0x71
+        uint8_t findCmd71[] = {0xAB, 0x00, 0x04, 0xFF, 0x71, 0x80, static_cast<uint8_t>(state ? 0x01 : 0x00)};
+        sendCommand(findCmd71, sizeof(findCmd71));
+        // Alternate variant: 0x7D
+        uint8_t findCmd7D[] = {0xAB, 0x00, 0x04, 0xFF, 0x7D, 0x80, static_cast<uint8_t>(state ? 0x01 : 0x00)};
+        sendCommand(findCmd7D, sizeof(findCmd7D));
     }
-    if (_chronchi_subscribed) {
+    if (_chronchi_subscribed || _connected) {
         char buf[64];
         snprintf(buf, sizeof(buf), "{\"action\":\"find_phone\",\"active\":%s}", state ? "true" : "false");
         _sendEspBridgePacket(PKT_COMMAND, buf);
     }
-    ESP_LOGI(TAG, "Sent find phone: %d", state);
+    ESP_LOGI(TAG, "Sent find phone: %d (connected=%d)", state, (int)_connected);
 }
 
 void ChronchiBle::syncRequest() {
@@ -647,7 +651,7 @@ void ChronchiBle::_handleRxChunk(const uint8_t* data, uint16_t len) {
     }
 
     // Protocol 2: Chronos NUS Binary Protocol Header
-    if ((data[0] == 0xAB || data[0] == 0xEA) && (data[3] == 0xFE || data[3] == 0xFF)) {
+    if ((data[0] == 0xAB || data[0] == 0xEA) && len >= 4) {
         _chronos_expected_len = ((static_cast<uint16_t>(data[1]) << 8) | data[2]) + 3;
         if (_chronos_expected_len > sizeof(_chronos_incoming_buf)) {
             _chronos_expected_len = sizeof(_chronos_incoming_buf);

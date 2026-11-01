@@ -17,6 +17,7 @@
 
 #include <esp_netif.h>
 #include <esp_sntp.h>
+#include <esp_wifi.h>
 
 #define TAG "Display"
 
@@ -235,11 +236,29 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         static uint8_t wifi_blink = 0;
         wifi_blink++;
         if (wifi_connected) {
-            lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI);
-            lv_obj_set_style_text_color(network_label_, lv_color_hex(0x22C55E), 0);
+            wifi_ap_record_t ap_info;
+            if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+                int8_t rssi = ap_info.rssi;
+                if (rssi >= -65) {
+                    // Strong signal (3 bars): Green
+                    lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI);
+                    lv_obj_set_style_text_color(network_label_, lv_color_hex(0x22C55E), 0);
+                } else if (rssi >= -78) {
+                    // Medium signal (2 bars): Amber/Yellow
+                    lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI_2_BAR);
+                    lv_obj_set_style_text_color(network_label_, lv_color_hex(0xEAB308), 0);
+                } else {
+                    // Weak signal (1 bar): Red/Coral
+                    lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI_1_BAR);
+                    lv_obj_set_style_text_color(network_label_, lv_color_hex(0xEF4444), 0);
+                }
+            } else {
+                lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI);
+                lv_obj_set_style_text_color(network_label_, lv_color_hex(0x22C55E), 0);
+            }
         } else {
             // Reconnecting amber alternating animation
-            lv_label_set_text(network_label_, (wifi_blink % 2 == 0) ? MATERIAL_SYMBOLS_REFRESH : MATERIAL_SYMBOLS_WIFI);
+            lv_label_set_text(network_label_, (wifi_blink % 2 == 0) ? MATERIAL_SYMBOLS_REFRESH : MATERIAL_SYMBOLS_WIFI_OFF);
             lv_obj_set_style_text_color(network_label_, lv_color_hex(0xF59E0B), 0);
         }
     }

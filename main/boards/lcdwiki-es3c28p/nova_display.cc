@@ -87,6 +87,20 @@ NovaDisplay::NovaDisplay(const NovaCallbacks& callbacks)
         saved_volume_ = callbacks_.get_volume();
         if (saved_volume_ <= 0) saved_volume_ = 75;
     }
+
+    nav_icon_buf_ = (uint8_t*)heap_caps_malloc(48 * 48 * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!nav_icon_buf_) nav_icon_buf_ = (uint8_t*)malloc(48 * 48 * 2);
+    if (nav_icon_buf_) {
+        memset(nav_icon_buf_, 0, 48 * 48 * 2);
+        memset(&nav_icon_dsc_, 0, sizeof(nav_icon_dsc_));
+        nav_icon_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
+        nav_icon_dsc_.header.cf = LV_COLOR_FORMAT_RGB565;
+        nav_icon_dsc_.header.w = 48;
+        nav_icon_dsc_.header.h = 48;
+        nav_icon_dsc_.header.stride = 48 * 2;
+        nav_icon_dsc_.data_size = 48 * 48 * 2;
+        nav_icon_dsc_.data = nav_icon_buf_;
+    }
 }
 
 void NovaDisplay::ApplyTheme(const std::string& theme_name, bool persist) {
@@ -168,6 +182,10 @@ std::string NovaDisplay::GetCurrentThemeName() const {
 
 NovaDisplay::~NovaDisplay() {
     CloseDownloadModal(false);
+    if (nav_icon_buf_) {
+        free(nav_icon_buf_);
+        nav_icon_buf_ = nullptr;
+    }
 }
 
 void NovaDisplay::Init(int width, int height) {
@@ -331,6 +349,10 @@ lv_obj_t* NovaDisplay::MakeIcon(lv_obj_t* parent, IconKind kind, int x, int y, l
         case ICON_PIANO:      sym = MATERIAL_SYMBOLS_MUSIC_NOTE; break;
         case ICON_DRAW:       sym = MATERIAL_SYMBOLS_EDIT_SQUARE; break;
         case ICON_DASHBOARD:  sym = MATERIAL_SYMBOLS_DEVICE_THERMOSTAT; break;
+        case ICON_NAV:        sym = MATERIAL_SYMBOLS_NAVIGATION; break;
+        case ICON_CHAT:       sym = MATERIAL_SYMBOLS_CHAT_BUBBLE; break;
+        case ICON_WEATHER:    sym = MATERIAL_SYMBOLS_DEVICE_THERMOSTAT; break;
+        case ICON_PHONE:      sym = MATERIAL_SYMBOLS_PHONE; break;
     }
     lv_label_set_text(lbl, sym);
     return root;
@@ -1008,9 +1030,9 @@ void NovaDisplay::BuildHome() {
         MakeButton(ai_card, "BUKA ASISTEN", 48, 47, 154, 22, C_CYAN, C_CYAN, C_BG, FONT_10, OnLaunchAiVoice, this);
 
         const int tile_x[] = {12, 88, 164};
-        const char* tile_names[] = {"Wi-Fi", "Watch", "Apps"};
-        const IconKind tile_icons[] = {ICON_WIFI, ICON_CHRONOS, ICON_APPS};
-        const lv_color_t tile_colors[] = {C_CYAN, C_AMBER, C_VIOLET};
+        const char* tile_names[] = {"Radio", "Watch", "Apps"};
+        const IconKind tile_icons[] = {ICON_RADIO, ICON_CHRONOS, ICON_APPS};
+        const lv_color_t tile_colors[] = {C_MINT, C_AMBER, C_VIOLET};
         for (int i = 0; i < 3; ++i) {
             lv_obj_t* tile = lv_btn_create(root);
             lv_obj_set_pos(tile, tile_x[i], 208);
@@ -1020,7 +1042,7 @@ void NovaDisplay::BuildHome() {
             MakeCenteredLabel(tile, tile_names[i], 0, 39, 64, 16, FONT_12, C_TEXT);
 
             if (i == 0) {
-                lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_WIFI);
+                lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_RADIO);
                 lv_obj_add_event_cb(tile, OnNavClicked, LV_EVENT_CLICKED, this);
             } else if (i == 1) {
                 lv_obj_add_event_cb(tile, OnLaunchChronchi, LV_EVENT_CLICKED, this);
@@ -1031,6 +1053,43 @@ void NovaDisplay::BuildHome() {
         }
     }
     MakeBottomNav(root, PAGE_HOME);
+}
+
+static void OnLaunchChronchiScreen(lv_event_t* event) {
+    if (lv_event_get_code(event) != LV_EVENT_CLICKED) return;
+    auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(event));
+    int screen = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(event));
+    if (!self) return;
+    if (screen == 1) {
+        self->NavigateTo(NovaDisplay::PAGE_NAV);
+    } else if (screen == 4) {
+        self->NavigateTo(NovaDisplay::PAGE_BT_MUSIC);
+    } else if (screen == 2) {
+        self->NavigateTo(NovaDisplay::PAGE_NOTIF);
+    } else if (screen == 3) {
+        self->NavigateTo(NovaDisplay::PAGE_WEATHER);
+    } else if (screen == 5) {
+        self->NavigateTo(NovaDisplay::PAGE_PHONE);
+    } else {
+        if (self->GetCallbacks().switch_mode) {
+            self->GetCallbacks().switch_mode(1);
+        }
+    }
+}
+
+void NovaDisplay::ChronchiTile(lv_obj_t* root, int x, int y, const char* name,
+                              const char* description, IconKind icon, lv_color_t accent, int screen) {
+    lv_obj_t* tile = lv_btn_create(root);
+    lv_obj_set_pos(tile, x, y);
+    lv_obj_set_size(tile, 102, 54);
+    StyleButton(tile, C_PANEL, C_BORDER, 12);
+    MakeIcon(tile, icon, 8, 13, accent, 26);
+    lv_obj_t* name_lbl = MakeLabel(tile, name, 40, 7, 58, 19, FONT_14, C_TEXT);
+    lv_label_set_long_mode(name_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_t* desc_lbl = MakeLabel(tile, description, 40, 27, 58, 18, FONT_10, C_MUTED);
+    lv_label_set_long_mode(desc_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_user_data(tile, (void*)(intptr_t)screen);
+    lv_obj_add_event_cb(tile, OnLaunchChronchiScreen, LV_EVENT_CLICKED, this);
 }
 
 void NovaDisplay::AppTile(lv_obj_t* root, int x, int y, const char* name,
@@ -1053,35 +1112,50 @@ void NovaDisplay::BuildApps() {
     MakeHeader(root, "APLIKASI", false);
 
     if (width_ > 240) {
-        // === RESPONSIVE LANDSCAPE 6-COLUMN APP GRID (17 Apps - 100% Fit On 1 Screen - No Scroll) ===
+        // === RESPONSIVE LANDSCAPE 6-COLUMN APP GRID (Semua Aplikasi & Fitur Chronos HP) ===
         struct AppGridItem {
             const char* name;
             IconKind icon;
             lv_color_t color;
             Page page;
-            bool is_chronchi;
+            int chronchi_screen; // -1: normal page, >= 0: Chronchi screen
             bool is_games_modal;
         };
 
         static const AppGridItem kApps[] = {
-            {"Xiaozhi",    ICON_AI,         C_CYAN,                  PAGE_AI,          false, false},
-            {"Chronchi",   ICON_CHRONOS,    C_AMBER,                 PAGE_HOME,        true,  false},
-            {"Radio",      ICON_RADIO,      C_MINT,                  PAGE_RADIO,       false, false},
-            {"Wi-Fi",      ICON_WIFI,       C_CYAN,                  PAGE_WIFI,        false, false},
-            {"Audio",      ICON_AUDIO,      C_AMBER,                 PAGE_AUDIO,       false, false},
-            {"File Hub",   ICON_FILES,      C_VIOLET,                PAGE_FILES,       false, false},
-            {"Chronos",    ICON_CHRONOS,    C_AMBER,                 PAGE_CHRONOS,     false, false},
-            {"Tampilan",   ICON_BRIGHTNESS, C_AMBER,                 PAGE_DISPLAY,     false, false},
-            {"Baterai",    ICON_BATTERY,    C_MINT,                  PAGE_BATTERY,     false, false},
-            {"Atur",       ICON_SETTINGS,   C_VIOLET,                PAGE_SETTINGS,    false, false},
-            {"Kalkulator", ICON_CALC,       C_CYAN,                  PAGE_CALCULATOR,  false, false},
-            {"Game",       ICON_GAME,       C_AMBER,                 PAGE_APPS,        false, true},
-            {"Pin Lab",    ICON_CHIP,       C_CYAN,                  PAGE_PINLAB,      false, false},
-            {"Pintasan",   ICON_SETTINGS,   C_CYAN,                  PAGE_QUICK,       false, false},
-            {"Piano",      ICON_PIANO,      C_CYAN,                  PAGE_PIANO,       false, false},
-            {"Sketch",     ICON_DRAW,       C_VIOLET,                PAGE_SKETCH,      false, false},
-            {"Monitor",    ICON_DASHBOARD,  C_MINT,                  PAGE_MONITOR,     false, false}
+            {"Xiaozhi",    ICON_AI,         C_CYAN,                  PAGE_AI,          -1, false},
+            {"Navigasi",   ICON_NAV,        C_MINT,                  PAGE_NAV,         -1, false},
+            {"Musik HP",   ICON_AUDIO,      C_AMBER,                 PAGE_BT_MUSIC,    -1, false},
+            {"Notif HP",   ICON_CHAT,       C_CYAN,                  PAGE_NOTIF,       -1, false},
+            {"Cuaca HP",   ICON_WEATHER,    C_AMBER,                 PAGE_WEATHER,     -1, false},
+            {"Cari HP",    ICON_PHONE,      C_MINT,                  PAGE_PHONE,       -1, false},
+            {"Smartwatch", ICON_CHRONOS,    C_AMBER,                 PAGE_HOME,         0, false},
+            {"Radio",      ICON_RADIO,      C_MINT,                  PAGE_RADIO,       -1, false},
+            {"Wi-Fi",      ICON_WIFI,       C_CYAN,                  PAGE_WIFI,        -1, false},
+            {"Audio",      ICON_AUDIO,      C_AMBER,                 PAGE_AUDIO,       -1, false},
+            {"File Hub",   ICON_FILES,      C_VIOLET,                PAGE_FILES,       -1, false},
+            {"Chronos",    ICON_CHRONOS,    C_AMBER,                 PAGE_CHRONOS,     -1, false},
+            {"Tampilan",   ICON_BRIGHTNESS, C_AMBER,                 PAGE_DISPLAY,     -1, false},
+            {"Baterai",    ICON_BATTERY,    C_MINT,                  PAGE_BATTERY,     -1, false},
+            {"Atur",       ICON_SETTINGS,   C_VIOLET,                PAGE_SETTINGS,    -1, false},
+            {"Kalkulator", ICON_CALC,       C_CYAN,                  PAGE_CALCULATOR,  -1, false},
+            {"Game",       ICON_GAME,       C_AMBER,                 PAGE_APPS,        -1, true},
+            {"Pin Lab",    ICON_CHIP,       C_CYAN,                  PAGE_PINLAB,      -1, false},
+            {"Pintasan",   ICON_SETTINGS,   C_CYAN,                  PAGE_QUICK,       -1, false},
+            {"Piano",      ICON_PIANO,      C_CYAN,                  PAGE_PIANO,       -1, false},
+            {"Sketch",     ICON_DRAW,       C_VIOLET,                PAGE_SKETCH,      -1, false},
+            {"Monitor",    ICON_DASHBOARD,  C_MINT,                  PAGE_MONITOR,     -1, false}
         };
+
+        lv_obj_t* list = lv_obj_create(root);
+        lv_obj_set_pos(list, 0, 32);
+        lv_obj_set_size(list, 320, 178);
+        lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 14, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+        lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
         const int total_apps = sizeof(kApps) / sizeof(kApps[0]);
         const int cols = 6;
@@ -1090,7 +1164,7 @@ void NovaDisplay::BuildApps() {
         const int gap_x = 6;
         const int gap_y = 6;
         const int start_x = 7;
-        const int start_y = 36;
+        const int start_y = 4;
 
         for (int i = 0; i < total_apps; ++i) {
             int c = i % cols;
@@ -1098,7 +1172,7 @@ void NovaDisplay::BuildApps() {
             int x = start_x + c * (tile_w + gap_x);
             int y = start_y + r * (tile_h + gap_y);
 
-            lv_obj_t* tile = lv_btn_create(root);
+            lv_obj_t* tile = lv_btn_create(list);
             lv_obj_set_pos(tile, x, y);
             lv_obj_set_size(tile, tile_w, tile_h);
             StyleButton(tile, C_PANEL, C_BORDER, 8);
@@ -1107,8 +1181,9 @@ void NovaDisplay::BuildApps() {
             lv_obj_t* lbl = MakeCenteredLabel(tile, kApps[i].name, 0, 32, tile_w, 14, FONT_10, C_TEXT);
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
-            if (kApps[i].is_chronchi) {
-                lv_obj_add_event_cb(tile, OnLaunchChronchi, LV_EVENT_CLICKED, this);
+            if (kApps[i].chronchi_screen >= 0) {
+                lv_obj_set_user_data(tile, (void*)(intptr_t)kApps[i].chronchi_screen);
+                lv_obj_add_event_cb(tile, OnLaunchChronchiScreen, LV_EVENT_CLICKED, this);
             } else if (kApps[i].is_games_modal) {
                 lv_obj_add_event_cb(tile, [](lv_event_t* e) {
                     auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
@@ -1133,41 +1208,41 @@ void NovaDisplay::BuildApps() {
 
         MakeLabel(list, "SEMUA APLIKASI", 14, 4, 212, 16, FONT_12, C_MUTED);
 
-        // Row 1
+        // Row 1: Xiaozhi AI & Radio Streaming Live
         AppTile(list, 12, 24, "Xiaozhi", "Asisten AI", ICON_AI, C_CYAN, PAGE_AI);
+        AppTile(list, 126, 24, "Radio Live", "Online Stream", ICON_RADIO, C_MINT, PAGE_RADIO);
 
-        lv_obj_t* chronchi_tile = lv_btn_create(list);
-        lv_obj_set_pos(chronchi_tile, 126, 24);
-        lv_obj_set_size(chronchi_tile, 102, 54);
-        StyleButton(chronchi_tile, C_PANEL, C_BORDER, 12);
-        MakeIcon(chronchi_tile, ICON_CHRONOS, 8, 13, C_AMBER, 26);
-        lv_obj_t* c_name = MakeLabel(chronchi_tile, "Chronchi", 40, 7, 58, 19, FONT_14, C_TEXT);
-        lv_label_set_long_mode(c_name, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_t* c_desc = MakeLabel(chronchi_tile, "Smartwatch", 40, 27, 58, 18, FONT_10, C_MUTED);
-        lv_label_set_long_mode(c_desc, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_add_event_cb(chronchi_tile, OnLaunchChronchi, LV_EVENT_CLICKED, this);
+        // Row 2: Navigasi Google Maps & Musik HP
+        AppTile(list, 12, 84, "Navigasi", "Google Maps", ICON_NAV, C_MINT, PAGE_NAV);
+        AppTile(list, 126, 84, "Musik HP", "Remote Media", ICON_AUDIO, C_AMBER, PAGE_BT_MUSIC);
 
-        // Row 2
-        AppTile(list, 12, 84, "Radio Live", "Online Stream", ICON_RADIO, C_MINT, PAGE_RADIO);
-        AppTile(list, 126, 84, "Wi-Fi", "Jaringan", ICON_WIFI, C_CYAN, PAGE_WIFI);
+        // Row 3: Notifikasi HP & Cuaca HP
+        AppTile(list, 12, 144, "Notif HP", "Pusat Pesan", ICON_CHAT, C_CYAN, PAGE_NOTIF);
+        AppTile(list, 126, 144, "Cuaca HP", "Info Cuaca", ICON_WEATHER, C_AMBER, PAGE_WEATHER);
 
-        // Row 3
-        AppTile(list, 12, 144, "Audio", "Suara I/O", ICON_AUDIO, C_AMBER, PAGE_AUDIO);
-        AppTile(list, 126, 144, "File Hub", "Berkas", ICON_FILES, C_VIOLET, PAGE_FILES);
-
-        // Row 4
-        AppTile(list, 12, 204, "Chronos", "Jam / fokus", ICON_CHRONOS, C_AMBER, PAGE_CHRONOS);
-        AppTile(list, 126, 204, "Tampilan", "Kecerahan", ICON_BRIGHTNESS, C_AMBER, PAGE_DISPLAY);
+        // Row 4: Cari HP & Smartwatch Chronos
+        AppTile(list, 12, 204, "Cari HP", "Deringkan HP", ICON_PHONE, C_MINT, PAGE_PHONE);
+        ChronchiTile(list, 126, 204, "Smartwatch", "Jam & Wajah", ICON_CHRONOS, C_AMBER, 0);
 
         // Row 5
-        AppTile(list, 12, 264, "Baterai", "Status daya", ICON_BATTERY, C_MINT, PAGE_BATTERY);
-        AppTile(list, 126, 264, "Atur", "Sistem", ICON_SETTINGS, C_VIOLET, PAGE_SETTINGS);
+        AppTile(list, 12, 264, "Wi-Fi", "Jaringan", ICON_WIFI, C_CYAN, PAGE_WIFI);
+        AppTile(list, 126, 264, "Audio", "Suara I/O", ICON_AUDIO, C_AMBER, PAGE_AUDIO);
 
         // Row 6
-        AppTile(list, 12, 324, "Kalkulator", "Hitung cepat", ICON_CALC, C_CYAN, PAGE_CALCULATOR);
+        AppTile(list, 12, 324, "File Hub", "Berkas", ICON_FILES, C_VIOLET, PAGE_FILES);
+        AppTile(list, 126, 324, "Chronos", "Jam / fokus", ICON_CHRONOS, C_AMBER, PAGE_CHRONOS);
 
+        // Row 7
+        AppTile(list, 12, 384, "Tampilan", "Kecerahan", ICON_BRIGHTNESS, C_AMBER, PAGE_DISPLAY);
+        AppTile(list, 126, 384, "Baterai", "Status daya", ICON_BATTERY, C_MINT, PAGE_BATTERY);
+
+        // Row 8
+        AppTile(list, 12, 444, "Atur", "Sistem", ICON_SETTINGS, C_VIOLET, PAGE_SETTINGS);
+        AppTile(list, 126, 444, "Kalkulator", "Hitung cepat", ICON_CALC, C_CYAN, PAGE_CALCULATOR);
+
+        // Row 9
         lv_obj_t* game_tile = lv_btn_create(list);
-        lv_obj_set_pos(game_tile, 126, 324);
+        lv_obj_set_pos(game_tile, 12, 504);
         lv_obj_set_size(game_tile, 102, 54);
         StyleButton(game_tile, C_PANEL, C_BORDER, 12);
         MakeIcon(game_tile, ICON_GAME, 8, 13, C_AMBER, 26);
@@ -1180,16 +1255,15 @@ void NovaDisplay::BuildApps() {
             if (self) self->ShowGamesModal();
         }, LV_EVENT_CLICKED, this);
 
-        // Row 7
-        AppTile(list, 12, 384, "Pin Lab", "Hardware", ICON_CHIP, C_CYAN, PAGE_PINLAB);
-        AppTile(list, 126, 384, "Pintasan", "Aksi Cepat", ICON_SETTINGS, C_CYAN, PAGE_QUICK);
+        AppTile(list, 126, 504, "Pin Lab", "Hardware", ICON_CHIP, C_CYAN, PAGE_PINLAB);
 
-        // Row 8
-        AppTile(list, 12, 444, "Mini Piano", "Synthesizer", ICON_PIANO, C_CYAN, PAGE_PIANO);
-        AppTile(list, 126, 444, "Sketchpad", "Papan Gambar", ICON_DRAW, C_VIOLET, PAGE_SKETCH);
+        // Row 10
+        AppTile(list, 12, 564, "Pintasan", "Aksi Cepat", ICON_SETTINGS, C_CYAN, PAGE_QUICK);
+        AppTile(list, 126, 564, "Mini Piano", "Synthesizer", ICON_PIANO, C_CYAN, PAGE_PIANO);
 
-        // Row 9
-        AppTile(list, 12, 504, "Monitor", "Task & CPU", ICON_DASHBOARD, C_MINT, PAGE_MONITOR);
+        // Row 11
+        AppTile(list, 12, 624, "Sketchpad", "Papan Gambar", ICON_DRAW, C_VIOLET, PAGE_SKETCH);
+        AppTile(list, 126, 624, "Monitor", "Task & CPU", ICON_DASHBOARD, C_MINT, PAGE_MONITOR);
     }
 
     MakeBottomNav(root, PAGE_APPS);
@@ -4766,6 +4840,11 @@ void NovaDisplay::BuildCurrentPage() {
         case PAGE_PIANO:      BuildPiano(); break;
         case PAGE_SKETCH:     BuildSketch(); break;
         case PAGE_MONITOR:    BuildMonitor(); break;
+        case PAGE_NAV:        BuildNav(); break;
+        case PAGE_BT_MUSIC:   BuildBtMusic(); break;
+        case PAGE_NOTIF:      BuildNotif(); break;
+        case PAGE_WEATHER:    BuildWeather(); break;
+        case PAGE_PHONE:      BuildPhone(); break;
     }
 }
 
@@ -4854,11 +4933,29 @@ void NovaDisplay::UpdateLiveLabels() {
 
     if (top_wifi_icon_) {
         if (wifi_connected) {
-            lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI);
-            lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0x22C55E), LV_PART_MAIN);
+            wifi_ap_record_t ap_info;
+            if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+                int8_t rssi = ap_info.rssi;
+                if (rssi >= -65) {
+                    // Strong signal (3 bars): Green
+                    lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI);
+                    lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0x22C55E), LV_PART_MAIN);
+                } else if (rssi >= -78) {
+                    // Medium signal (2 bars): Amber/Yellow
+                    lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI_2_BAR);
+                    lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0xEAB308), LV_PART_MAIN);
+                } else {
+                    // Weak signal (1 bar): Red/Coral
+                    lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI_1_BAR);
+                    lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
+                }
+            } else {
+                lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI);
+                lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0x22C55E), LV_PART_MAIN);
+            }
         } else {
             // Reconnecting indicator: alternating icon and amber color
-            lv_label_set_text(top_wifi_icon_, (wifi_tick % 2 == 0) ? MATERIAL_SYMBOLS_REFRESH : MATERIAL_SYMBOLS_WIFI);
+            lv_label_set_text(top_wifi_icon_, (wifi_tick % 2 == 0) ? MATERIAL_SYMBOLS_REFRESH : MATERIAL_SYMBOLS_WIFI_OFF);
             lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0xF59E0B), LV_PART_MAIN);
         }
     }
@@ -6078,13 +6175,13 @@ struct RadioStation {
 };
 
 static const RadioStation kRadioStations[] = {
-    {"Prambors Radio", "102.2 FM - Top 40 Pop Hits", "kPa7bsKwL-c", "Prambors Radio Live Streaming", lv_color_hex(0xF59E0B)},
-    {"Gen FM Jakarta", "98.7 FM - Suara Musik Indo", "4zMcXsNXVMg", "Gen FM Jakarta Streaming Live", lv_color_hex(0xEC4899)},
-    {"Trax FM Jakarta", "101.4 FM - Hits & Trending", "z2NExXMq1YE", "Trax FM Jakarta Live Stream", lv_color_hex(0x8B5CF6)},
-    {"I-Radio Jakarta", "89.6 FM - 100% Musik Indo", "GB09st7rtv0", "I-Radio Jakarta Live Streaming", lv_color_hex(0x06B6D4)},
-    {"Lofi Chill Beats", "Lo-Fi Work / Study Music", "sF80I-TQiW0", "Lofi Hip Hop Radio Beats to Relax", lv_color_hex(0x10B981)},
-    {"BBC World Service", "International Live News", "sznvwF51OsU", "BBC World Service Live Stream", lv_color_hex(0x3B82F6)},
-    {"Hard Rock FM", "87.6 FM - Rock & Lifestyle", "pAgnJDJN4VA", "Hard Rock FM Jakarta Live", lv_color_hex(0xEF4444)}
+    {"Prambors Radio", "102.2 FM - Top 40 Hits", "a9uVJphGruM", "Prambors Top 40 Hits Terbaru", lv_color_hex(0xF59E0B)},
+    {"Gen FM Jakarta", "98.7 FM - Suara Musik Indo", "mmkuC9IgfkE", "Gen FM Hits Musik Indonesia", lv_color_hex(0xEC4899)},
+    {"Lofi Chill Beats", "Lo-Fi Work / Study Music", "CLeZyIID9Bo", "Lofi Hip Hop Chill Beats", lv_color_hex(0x10B981)},
+    {"Hard Rock FM", "87.6 FM - Rock & Lifestyle", "O1I8QOWQ2RU", "Hard Rock Hits Terbaik", lv_color_hex(0xEF4444)},
+    {"Akustik Cafe", "Pop Akustik Santai Sore", "qIzOXW9-Zsw", "Akustik Cafe Indonesia Populer", lv_color_hex(0x8B5CF6)},
+    {"Billboard Hot 100", "Top Global Billboard Hits", "AOYJ4Mx1jsQ", "Billboard Hot 100 Pop Hits", lv_color_hex(0x3B82F6)},
+    {"I-Radio Jakarta", "89.6 FM - 100% Musik Indo", "PJ4jj_3S670", "I-Radio Musik Pop Indo Terbaik", lv_color_hex(0x06B6D4)}
 };
 
 static void OnRadioStationClick(lv_event_t* e) {
@@ -6107,7 +6204,9 @@ void NovaDisplay::OnRadioStationSelect(int idx) {
         radio_active_idx_ = idx;
         const auto& st = kRadioStations[idx];
         if (callbacks_.play_online) {
-            callbacks_.play_online(st.video_id, st.name, "LIVE");
+            std::string vid = (st.video_id != nullptr) ? st.video_id : "";
+            std::string q = (st.query != nullptr) ? st.query : st.name;
+            callbacks_.play_online(vid, q, "LIVE");
         }
     }
     if (callbacks_.trigger_click) callbacks_.trigger_click();
@@ -6117,6 +6216,10 @@ void NovaDisplay::OnRadioStationSelect(int idx) {
 void NovaDisplay::BuildRadio() {
     lv_obj_t* root = NewRoot();
     MakeHeader(root, "RADIO STREAMING");
+
+    if (callbacks_.is_online_playing && !callbacks_.is_online_playing()) {
+        radio_active_idx_ = -1;
+    }
 
     const int count = sizeof(kRadioStations) / sizeof(kRadioStations[0]);
 
@@ -8790,3 +8893,1072 @@ void NovaDisplay::BuildMonitor() {
 
 
 
+
+// ============================================================================
+// CHRONOS INTEGRATION & NATIVE NOVA OS BLUETOOTH FEATURES
+// ============================================================================
+
+void NovaDisplay::ShowNotificationBanner(const std::string& app, const std::string& title, const std::string& message) {
+    lvgl_port_lock(0);
+    lv_obj_t* top = lv_layer_top();
+    if (!top) {
+        lvgl_port_unlock();
+        return;
+    }
+
+    if (notif_banner_) {
+        lv_obj_del(notif_banner_);
+        notif_banner_ = nullptr;
+    }
+    if (notif_banner_timer_) {
+        lv_timer_del(notif_banner_timer_);
+        notif_banner_timer_ = nullptr;
+    }
+
+    int banner_w = width_ - 16;
+    int banner_h = 52;
+
+    notif_banner_ = lv_obj_create(top);
+    lv_obj_set_pos(notif_banner_, 8, 4);
+    lv_obj_set_size(notif_banner_, banner_w, banner_h);
+    lv_obj_set_style_radius(notif_banner_, 10, 0);
+    lv_obj_set_style_bg_color(notif_banner_, lv_color_hex(0x090D16), 0);
+    lv_obj_set_style_bg_opa(notif_banner_, LV_OPA_90, 0);
+
+    uint32_t border_color = 0x38BDF8;
+    if (app.find("WhatsApp") != std::string::npos || app.find("WA") != std::string::npos) border_color = 0x10B981;
+    else if (app.find("Telegram") != std::string::npos) border_color = 0x0284C7;
+    else if (app.find("Instagram") != std::string::npos) border_color = 0xEC4899;
+    else if (app.find("YouTube") != std::string::npos) border_color = 0xEF4444;
+
+    lv_obj_set_style_border_color(notif_banner_, lv_color_hex(border_color), 0);
+    lv_obj_set_style_border_width(notif_banner_, 2, 0);
+    lv_obj_set_style_pad_all(notif_banner_, 4, 0);
+    lv_obj_set_style_pad_left(notif_banner_, 10, 0);
+    lv_obj_set_style_pad_right(notif_banner_, 10, 0);
+    lv_obj_clear_flag(notif_banner_, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* title_lbl = lv_label_create(notif_banner_);
+    std::string h_str = app.empty() ? "NOTIFIKASI" : app;
+    if (!title.empty()) h_str += " - " + title;
+    lv_label_set_text(title_lbl, h_str.c_str());
+    lv_obj_set_style_text_font(title_lbl, FONT_12, 0);
+    lv_obj_set_style_text_color(title_lbl, lv_color_hex(border_color), 0);
+    lv_obj_set_pos(title_lbl, 0, 2);
+    lv_obj_set_width(title_lbl, banner_w - 24);
+    lv_label_set_long_mode(title_lbl, LV_LABEL_LONG_DOT);
+
+    lv_obj_t* msg_lbl = lv_label_create(notif_banner_);
+    lv_label_set_text(msg_lbl, message.empty() ? "(Pesan baru)" : message.c_str());
+    lv_obj_set_style_text_font(msg_lbl, FONT_14, 0);
+    lv_obj_set_style_text_color(msg_lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_pos(msg_lbl, 0, 22);
+    lv_obj_set_width(msg_lbl, banner_w - 24);
+    lv_label_set_long_mode(msg_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+    lv_obj_move_foreground(notif_banner_);
+    lv_obj_add_flag(notif_banner_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(notif_banner_, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self) {
+            self->DismissNotificationBanner();
+            self->NavigateTo(PAGE_NOTIF);
+        }
+    }, LV_EVENT_CLICKED, this);
+
+    notif_banner_timer_ = lv_timer_create([](lv_timer_t* t) {
+        auto* self = static_cast<NovaDisplay*>(lv_timer_get_user_data(t));
+        if (self) {
+            self->notif_banner_timer_ = nullptr;
+            self->DismissNotificationBanner();
+        }
+    }, 6000, this);
+    lv_timer_set_repeat_count(notif_banner_timer_, 1);
+
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::DismissNotificationBanner() {
+    lvgl_port_lock(0);
+    if (notif_banner_timer_) {
+        lv_timer_del(notif_banner_timer_);
+        notif_banner_timer_ = nullptr;
+    }
+    if (notif_banner_) {
+        lv_obj_del(notif_banner_);
+        notif_banner_ = nullptr;
+    }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::ShowBtMusicModal() {
+    NavigateTo(PAGE_BT_MUSIC);
+}
+
+void NovaDisplay::ShowNavModal() {
+    NavigateTo(PAGE_NAV);
+}
+
+void NovaDisplay::ShowNotifCenterModal() {
+    NavigateTo(PAGE_NOTIF);
+}
+
+void NovaDisplay::ShowWeatherModal() {
+    NavigateTo(PAGE_WEATHER);
+}
+
+void NovaDisplay::ShowPhoneModal() {
+    NavigateTo(PAGE_PHONE);
+}
+
+// ---- NAVIGATION 48x48 ICON DRAWING HELPERS ----
+static inline void nav_put_pixel(uint8_t* buf, int x, int y, uint16_t color) {
+    if (x < 0 || x >= 48 || y < 0 || y >= 48) return;
+    int idx = (y * 48 + x) * 2;
+    buf[idx] = color & 0xFF;
+    buf[idx + 1] = (color >> 8) & 0xFF;
+}
+
+static void nav_draw_filled_circle(uint8_t* buf, int cx, int cy, int r, uint16_t color) {
+    for (int dy = -r; dy <= r; dy++) {
+        for (int dx = -r; dx <= r; dx++) {
+            if (dx * dx + dy * dy <= r * r) {
+                nav_put_pixel(buf, cx + dx, cy + dy, color);
+            }
+        }
+    }
+}
+
+static void nav_draw_arrow_up(uint8_t* buf, uint16_t color) {
+    for (int y = 24; y <= 42; y++)
+        for (int x = 21; x <= 26; x++)
+            nav_put_pixel(buf, x, y, color);
+    nav_draw_filled_circle(buf, 24, 42, 3, color);
+    for (int i = 0; i < 16; i++) {
+        int half = 2 + (i * 8) / 16;
+        for (int x = 24 - half; x <= 24 + half; x++)
+            nav_put_pixel(buf, x, 6 + i, color);
+    }
+}
+
+static void nav_draw_arrow_left(uint8_t* buf, uint16_t color) {
+    for (int y = 21; y <= 26; y++)
+        for (int x = 12; x <= 34; x++)
+            nav_put_pixel(buf, x, y, color);
+    nav_draw_filled_circle(buf, 34, 24, 3, color);
+    for (int i = 0; i < 16; i++) {
+        int half = 2 + (i * 8) / 16;
+        for (int y = 24 - half; y <= 24 + half; y++)
+            nav_put_pixel(buf, 6 + i, y, color);
+    }
+}
+
+static void nav_draw_arrow_right(uint8_t* buf, uint16_t color) {
+    for (int y = 21; y <= 26; y++)
+        for (int x = 13; x <= 35; x++)
+            nav_put_pixel(buf, x, y, color);
+    nav_draw_filled_circle(buf, 13, 24, 3, color);
+    for (int i = 0; i < 16; i++) {
+        int half = 2 + (i * 8) / 16;
+        for (int y = 24 - half; y <= 24 + half; y++)
+            nav_put_pixel(buf, 41 - i, y, color);
+    }
+}
+
+static void nav_draw_arrow_slight_left(uint8_t* buf, uint16_t color) {
+    for (int i = 0; i < 20; i++) {
+        int x = 32 - i;
+        int y = 34 - i;
+        for (int d = -2; d <= 2; d++) {
+            nav_put_pixel(buf, x + d, y, color);
+            nav_put_pixel(buf, x, y + d, color);
+        }
+    }
+    nav_draw_filled_circle(buf, 32, 34, 3, color);
+    for (int i = 0; i < 12; i++) {
+        int half = 2 + (i * 5) / 12;
+        int cx = 12 - i / 2, cy = 14 - i / 2;
+        for (int d = -half; d <= half; d++)
+            nav_put_pixel(buf, cx + d, cy, color);
+    }
+}
+
+static void nav_draw_arrow_slight_right(uint8_t* buf, uint16_t color) {
+    for (int i = 0; i < 20; i++) {
+        int x = 15 + i;
+        int y = 34 - i;
+        for (int d = -2; d <= 2; d++) {
+            nav_put_pixel(buf, x + d, y, color);
+            nav_put_pixel(buf, x, y + d, color);
+        }
+    }
+    nav_draw_filled_circle(buf, 15, 34, 3, color);
+    for (int i = 0; i < 12; i++) {
+        int half = 2 + (i * 5) / 12;
+        int cx = 35 + i / 2, cy = 14 - i / 2;
+        for (int d = -half; d <= half; d++)
+            nav_put_pixel(buf, cx + d, cy, color);
+    }
+}
+
+static void nav_draw_arrow_uturn(uint8_t* buf, uint16_t color) {
+    for (int y = 20; y <= 40; y++)
+        for (int x = 27; x <= 32; x++)
+            nav_put_pixel(buf, x, y, color);
+    nav_draw_filled_circle(buf, 29, 40, 2, color);
+    for (int a = 0; a <= 180; a += 3) {
+        float rad = a * 3.14159f / 180.0f;
+        for (int t = -2; t <= 2; t++) {
+            int x = 20 + (int)((9 + t) * cosf(rad));
+            int y = 20 - (int)((9 + t) * sinf(rad));
+            nav_put_pixel(buf, x, y, color);
+        }
+    }
+    for (int y = 20; y <= 32; y++)
+        for (int x = 9; x <= 14; x++)
+            nav_put_pixel(buf, x, y, color);
+    for (int i = 0; i < 12; i++) {
+        int half = 1 + (i * 7) / 12;
+        for (int x = 11 - half; x <= 11 + half; x++)
+            nav_put_pixel(buf, x, 32 + i, color);
+    }
+}
+
+static void nav_draw_roundabout(uint8_t* buf, uint16_t color) {
+    int r = 14;
+    for (int a = 0; a < 360; a += 2) {
+        float rad = a * 3.14159f / 180.0f;
+        for (int t = -1; t <= 1; t++) {
+            int x = 24 + (int)((r + t) * cosf(rad));
+            int y = 24 + (int)((r + t) * sinf(rad));
+            nav_put_pixel(buf, x, y, color);
+        }
+    }
+    for (int y = 21; y <= 26; y++)
+        for (int x = 30; x <= 42; x++)
+            nav_put_pixel(buf, x, y, color);
+    for (int i = 0; i < 8; i++) {
+        int half = 1 + (i * 3) / 8;
+        for (int y = 24 - half; y <= 24 + half; y++)
+            nav_put_pixel(buf, 42 - i, y, color);
+    }
+}
+
+static void nav_draw_arrive(uint8_t* buf, uint16_t color, uint16_t cutout) {
+    nav_draw_filled_circle(buf, 24, 14, 9, color);
+    nav_draw_filled_circle(buf, 24, 14, 4, cutout);
+    for (int i = 0; i < 16; i++) {
+        int half = 9 - (i * 6) / 16;
+        for (int x = 24 - half; x <= 24 + half; x++)
+            nav_put_pixel(buf, x, 23 + i, color);
+    }
+    nav_put_pixel(buf, 24, 39, color);
+    nav_put_pixel(buf, 24, 40, color);
+}
+
+static void nav_draw_car(uint8_t* buf, uint16_t color, uint16_t cutout) {
+    for (int y = 24; y <= 36; y++)
+        for (int x = 10; x <= 37; x++)
+            nav_put_pixel(buf, x, y, color);
+    for (int y = 16; y <= 24; y++)
+        for (int x = 15; x <= 32; x++)
+            nav_put_pixel(buf, x, y, color);
+    for (int y = 17; y <= 23; y++)
+        for (int x = 16; x <= 22; x++)
+            nav_put_pixel(buf, x, y, cutout);
+    for (int y = 17; y <= 23; y++)
+        for (int x = 25; x <= 31; x++)
+            nav_put_pixel(buf, x, y, cutout);
+    nav_draw_filled_circle(buf, 15, 37, 4, color);
+    nav_draw_filled_circle(buf, 32, 37, 4, color);
+    nav_put_pixel(buf, 10, 28, 0xFFE0);
+    nav_put_pixel(buf, 10, 29, 0xFFE0);
+    nav_put_pixel(buf, 37, 28, 0xFFE0);
+    nav_put_pixel(buf, 37, 29, 0xFFE0);
+}
+
+void NovaDisplay::RenderNavIcon(const std::string& maneuver, const std::string& directions, bool has_icon, const uint8_t* icon_data) {
+    if (!nav_icon_buf_) return;
+
+    // Dark slate background: 0x1A2636
+    uint16_t bg_color = 0x1926;
+    // Bright sky blue foreground: 0x38BDF8
+    uint16_t fg_color = 0x3DFE;
+
+    if (has_icon && icon_data) {
+        for (int y = 0; y < 48; y++) {
+            for (int x = 0; x < 48; x++) {
+                int byte_idx = (y * 48 + x) / 8;
+                int bit_pos = 7 - (x % 8);
+                bool on = (icon_data[byte_idx] >> bit_pos) & 0x01;
+                uint16_t color = on ? fg_color : bg_color;
+                int offset = (y * 48 + x) * 2;
+                nav_icon_buf_[offset] = color & 0xFF;
+                nav_icon_buf_[offset + 1] = (color >> 8) & 0xFF;
+            }
+        }
+        return;
+    }
+
+    for (int i = 0; i < 48 * 48; i++) {
+        nav_icon_buf_[i * 2] = bg_color & 0xFF;
+        nav_icon_buf_[i * 2 + 1] = (bg_color >> 8) & 0xFF;
+    }
+
+    std::string m = maneuver;
+    if (m.empty() && !directions.empty()) {
+        std::string d = directions;
+        for (auto& c : d) c = (char)tolower((unsigned char)c);
+        if (d.find("slight left") != std::string::npos || d.find("serong kiri") != std::string::npos || d.find("agak ke kiri") != std::string::npos) {
+            m = "SLIGHT_LEFT";
+        } else if (d.find("slight right") != std::string::npos || d.find("serong kanan") != std::string::npos || d.find("agak ke kanan") != std::string::npos) {
+            m = "SLIGHT_RIGHT";
+        } else if (d.find("putar balik") != std::string::npos || d.find("u-turn") != std::string::npos) {
+            m = "UTURN";
+        } else if (d.find("kiri") != std::string::npos || d.find("left") != std::string::npos) {
+            m = "LEFT";
+        } else if (d.find("kanan") != std::string::npos || d.find("right") != std::string::npos) {
+            m = "RIGHT";
+        } else if (d.find("bundaran") != std::string::npos || d.find("roundabout") != std::string::npos) {
+            m = "ROUNDABOUT";
+        } else if (d.find("sampai") != std::string::npos || d.find("arrive") != std::string::npos || d.find("tujuan") != std::string::npos || d.find("tiba") != std::string::npos) {
+            m = "ARRIVE";
+        } else if (d.find("lurus") != std::string::npos || d.find("straight") != std::string::npos || d.find("maju") != std::string::npos) {
+            m = "STRAIGHT";
+        }
+    }
+
+    if (m == "LEFT") nav_draw_arrow_left(nav_icon_buf_, fg_color);
+    else if (m == "RIGHT") nav_draw_arrow_right(nav_icon_buf_, fg_color);
+    else if (m == "SLIGHT_LEFT") nav_draw_arrow_slight_left(nav_icon_buf_, fg_color);
+    else if (m == "SLIGHT_RIGHT") nav_draw_arrow_slight_right(nav_icon_buf_, fg_color);
+    else if (m == "UTURN") nav_draw_arrow_uturn(nav_icon_buf_, fg_color);
+    else if (m == "ROUNDABOUT") nav_draw_roundabout(nav_icon_buf_, fg_color);
+    else if (m == "ARRIVE") nav_draw_arrive(nav_icon_buf_, fg_color, bg_color);
+    else if (m == "STRAIGHT") nav_draw_arrow_up(nav_icon_buf_, fg_color);
+    else nav_draw_car(nav_icon_buf_, fg_color, bg_color);
+}
+
+void NovaDisplay::BuildNav() {
+    lv_obj_t* root = NewRoot();
+    MakeHeader(root, "NAVIGASI GOOGLE MAPS");
+
+    std::string dist = "--", dir = "Menunggu instruksi...", title = "Buka Google Maps di HP";
+    std::string dur = "--", eta = "--:--", spd = "--";
+    bool active = false;
+    if (callbacks_.get_ble_nav) {
+        callbacks_.get_ble_nav(dist, dir, title, dur, eta, spd, active);
+    }
+
+    std::string maneuver = last_nav_maneuver_;
+    bool has_icon = last_nav_has_icon_;
+    const uint8_t* icon_data = last_nav_has_icon_ ? last_nav_icon_data_ : nullptr;
+    if (callbacks_.get_ble_nav_extra) {
+        callbacks_.get_ble_nav_extra(maneuver, has_icon, icon_data);
+    }
+    RenderNavIcon(maneuver, dir, has_icon, icon_data);
+
+    bool is_land = (width_ > 240);
+    int content_w = is_land ? 304 : 224;
+    int content_x = (width_ - content_w) / 2;
+
+    if (!is_land) {
+        // === PORTRAIT LAYOUT (240x320) ===
+        // Tanpa header/pill "SIAP BUKA MAPS" agar tidak menghalangi dan luas!
+
+        // 1. Kartu Manuver & Belokan Utama (y=36, h=146)
+        lv_obj_t* card = MakePanel(root, content_x, 36, content_w, 146, lv_color_hex(0x131B26), 
+                                   active ? lv_color_hex(0x06B6D4) : C_BORDER, 12);
+        lv_obj_set_style_border_width(card, 2, 0);
+
+        // Icon Rute Gede & Rapih (54x54 Badge Container dengan Gambar 48x48)
+        lv_obj_t* icon_badge = lv_obj_create(card);
+        lv_obj_set_pos(icon_badge, 8, 8);
+        lv_obj_set_size(icon_badge, 54, 54);
+        lv_obj_set_style_radius(icon_badge, 12, 0);
+        lv_obj_set_style_bg_color(icon_badge, lv_color_hex(0x1A2636), 0);
+        lv_obj_set_style_border_color(icon_badge, lv_color_hex(0x38BDF8), 0);
+        lv_obj_set_style_border_width(icon_badge, 2, 0);
+        lv_obj_set_style_pad_all(icon_badge, 0, 0);
+        lv_obj_clear_flag(icon_badge, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+
+        if (nav_icon_buf_) {
+            lv_obj_t* icon_img = lv_image_create(icon_badge);
+            lv_image_set_src(icon_img, &nav_icon_dsc_);
+            lv_obj_center(icon_img);
+        }
+
+        // Jarak Belokan Berikutnya
+        std::string dist_str = dist.empty() ? "-- m" : dist;
+        lv_obj_t* dist_lbl = MakeLabel(card, dist_str.c_str(), 70, 6, content_w - 78, 30, FONT_28, lv_color_hex(0x38BDF8));
+
+        // Status GPS Aktif
+        std::string status_txt = active ? "● Rute GPS Aktif" : "Menunggu Rute...";
+        MakeLabel(card, status_txt.c_str(), 70, 36, content_w - 78, 18, FONT_10, active ? C_MINT : C_MUTED);
+
+        // Instruksi Manuver (e.g. Belok Kanan)
+        std::string dir_str = dir.empty() ? "Mulai rute navigasi di ponsel" : dir;
+        lv_obj_t* dir_lbl = MakeLabel(card, dir_str.c_str(), 10, 68, content_w - 20, 24, FONT_14, lv_color_hex(0xFFFFFF));
+        lv_label_set_long_mode(dir_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+        // Nama Jalan Tujuan (e.g. ke Jl. Sudirman)
+        std::string title_str = title.empty() ? "Menunggu tujuan..." : title;
+        lv_obj_t* street_lbl = MakeLabel(card, title_str.c_str(), 10, 94, content_w - 20, 22, FONT_12, lv_color_hex(0xFBBF24));
+        lv_label_set_long_mode(street_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+        // Catatan Info
+        MakeLabel(card, active ? "Notifikasi diredam selama navigasi" : "Tersambung via Bluetooth Chronos", 
+                  10, 120, content_w - 20, 16, FONT_10, C_MUTED);
+
+        // 2. Kartu Telemetri (ETA, Durasi, Kecepatan) (y=190, h=76)
+        lv_obj_t* tcard = MakePanel(root, content_x, 190, content_w, 76, lv_color_hex(0x18181B), C_BORDER, 10);
+
+        // Panel Kiri: Estimasi Tiba (ETA) & Sisa Waktu
+        int half_w = (content_w - 16) / 2;
+        lv_obj_t* p_left = MakePanel(tcard, 6, 6, half_w, 64, lv_color_hex(0x222228), C_BORDER, 8);
+        MakeLabel(p_left, "ESTIMASI TIBA", 6, 4, half_w - 12, 14, FONT_10, C_MUTED);
+        
+        // Teks ETA dikecilkan (FONT_12) agar pas dan rapi tanpa terpotong
+        std::string eta_clean = eta.empty() ? "--:--" : eta;
+        std::string eta_txt = "ETA: " + eta_clean;
+        MakeLabel(p_left, eta_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, lv_color_hex(0xF59E0B));
+
+        std::string dur_txt = dur.empty() ? "-- mnt" : dur;
+        MakeLabel(p_left, dur_txt.c_str(), 6, 40, half_w - 12, 16, FONT_10, lv_color_hex(0x10B981));
+
+        // Panel Kanan: Kecepatan & Status
+        lv_obj_t* p_right = MakePanel(tcard, 10 + half_w, 6, half_w, 64, lv_color_hex(0x222228), C_BORDER, 8);
+        MakeLabel(p_right, "KECEPATAN", 6, 4, half_w - 12, 14, FONT_10, C_MUTED);
+        std::string spd_txt = spd.empty() ? "-- km/h" : spd;
+        MakeLabel(p_right, spd_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, lv_color_hex(0x38BDF8));
+        MakeLabel(p_right, active ? "GPS Live" : "Standby", 6, 40, half_w - 12, 16, FONT_10, C_MUTED);
+
+    } else {
+        // === LANDSCAPE LAYOUT (320x240) ===
+
+        // Left Column: Route & Distance (w=176, h=166)
+        lv_obj_t* card = MakePanel(root, 8, 36, 176, 166, lv_color_hex(0x131B26), lv_color_hex(0x06B6D4), 12);
+        lv_obj_set_style_border_width(card, 2, 0);
+
+        // Large Turn Icon Badge
+        lv_obj_t* icon_badge = lv_obj_create(card);
+        lv_obj_set_pos(icon_badge, 8, 8);
+        lv_obj_set_size(icon_badge, 54, 54);
+        lv_obj_set_style_radius(icon_badge, 12, 0);
+        lv_obj_set_style_bg_color(icon_badge, lv_color_hex(0x1A2636), 0);
+        lv_obj_set_style_border_color(icon_badge, lv_color_hex(0x38BDF8), 0);
+        lv_obj_set_style_border_width(icon_badge, 2, 0);
+        lv_obj_set_style_pad_all(icon_badge, 0, 0);
+        lv_obj_clear_flag(icon_badge, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+
+        if (nav_icon_buf_) {
+            lv_obj_t* icon_img = lv_image_create(icon_badge);
+            lv_image_set_src(icon_img, &nav_icon_dsc_);
+            lv_obj_center(icon_img);
+        }
+
+        std::string dist_str = dist.empty() ? "-- m" : dist;
+        lv_obj_t* dist_lbl = MakeLabel(card, dist_str.c_str(), 68, 6, 100, 30, FONT_24, C_TEXT);
+        lv_obj_set_style_text_color(dist_lbl, lv_color_hex(0x38BDF8), 0);
+
+        std::string status_txt = active ? "● Rute GPS Aktif" : "Menunggu Rute...";
+        MakeLabel(card, status_txt.c_str(), 68, 36, 100, 16, FONT_10, active ? C_MINT : C_MUTED);
+
+        std::string dir_str = dir.empty() ? "Buka Google Maps di HP" : dir;
+        lv_obj_t* dir_lbl = MakeLabel(card, dir_str.c_str(), 8, 68, 160, 24, FONT_12, lv_color_hex(0xFFFFFF));
+        lv_label_set_long_mode(dir_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+        std::string title_str = title.empty() ? "Menunggu rute..." : title;
+        lv_obj_t* street_lbl = MakeLabel(card, title_str.c_str(), 8, 94, 160, 20, FONT_10, lv_color_hex(0xFBBF24));
+        lv_label_set_long_mode(street_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+        MakeLabel(card, active ? "Notifikasi diredam" : "Bluetooth Chronos", 8, 118, 160, 16, FONT_10, C_MUTED);
+
+        // Right Column: Telemetry Dashboard (w=124, h=166)
+        lv_obj_t* tcard = MakePanel(root, 188, 36, 124, 166, lv_color_hex(0x18181B), C_BORDER, 10);
+        MakeLabel(tcard, "ESTIMASI TIBA", 8, 8, 108, 14, FONT_10, C_MUTED);
+        std::string eta_txt = "ETA: " + (eta.empty() ? "--:--" : eta);
+        MakeLabel(tcard, eta_txt.c_str(), 8, 24, 108, 18, FONT_12, lv_color_hex(0xF59E0B));
+
+        MakeLabel(tcard, "SISA WAKTU", 8, 54, 108, 14, FONT_10, C_MUTED);
+        std::string dur_txt = dur.empty() ? "-- mnt" : dur;
+        MakeLabel(tcard, dur_txt.c_str(), 8, 68, 108, 18, FONT_12, lv_color_hex(0x10B981));
+
+        MakeLabel(tcard, "KECEPATAN", 8, 98, 108, 14, FONT_10, C_MUTED);
+        std::string spd_txt = spd.empty() ? "-- km/h" : spd;
+        MakeLabel(tcard, spd_txt.c_str(), 8, 112, 108, 18, FONT_12, lv_color_hex(0x38BDF8));
+    }
+
+    MakeBottomNav(root, PAGE_NAV);
+}
+
+void NovaDisplay::BuildBtMusic() {
+    lv_obj_t* root = NewRoot();
+    MakeHeader(root, "MUSIK HP");
+
+    std::string title = "--", artist = "--";
+    bool playing = false;
+    if (callbacks_.get_ble_music) {
+        callbacks_.get_ble_music(title, artist, playing);
+    }
+
+    bool is_land = (width_ > 240);
+    int content_w = is_land ? 300 : 216;
+    int content_x = (width_ - content_w) / 2;
+
+    int card_y = 38;
+    int card_h = is_land ? 164 : 236;
+    lv_obj_t* card = MakePanel(root, content_x, card_y, content_w, card_h, C_PANEL, C_AMBER, 12);
+
+    // Album art / Disc icon
+    int art_y = is_land ? 12 : 16;
+    int art_x = is_land ? 16 : (content_w / 2 - 24);
+    MakeIcon(card, ICON_AUDIO, art_x, art_y, C_AMBER, is_land ? 36 : 48);
+
+    int text_x = is_land ? 70 : 10;
+    int text_w = is_land ? (content_w - 80) : (content_w - 20);
+
+    // Title & Artist
+    lv_obj_t* t_lbl = MakeCenteredLabel(card, title.empty() ? "Tidak Ada Musik" : title.c_str(), 
+                                        text_x, is_land ? 14 : 74, text_w, 22, FONT_14, C_TEXT);
+    lv_label_set_long_mode(t_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+    lv_obj_t* a_lbl = MakeCenteredLabel(card, artist.empty() ? "Buka Spotify/YouTube di HP" : artist.c_str(), 
+                                        text_x, is_land ? 38 : 98, text_w, 18, FONT_12, C_MUTED);
+    lv_label_set_long_mode(a_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+    // Media Control Buttons (Prev, Play/Pause, Next)
+    int btn_y = is_land ? 74 : 126;
+    int btn_w = 44, btn_h = 36;
+    int center_btn_x = content_w / 2;
+
+    // Previous Button
+    lv_obj_t* prev_btn = lv_btn_create(card);
+    lv_obj_set_size(prev_btn, btn_w, btn_h);
+    lv_obj_set_pos(prev_btn, center_btn_x - btn_w - 24, btn_y);
+    StyleButton(prev_btn, C_PANEL_2, C_BORDER, 8);
+    lv_obj_t* p_icon = lv_label_create(prev_btn);
+    lv_obj_set_style_text_font(p_icon, FONT_ICON, 0);
+    lv_label_set_text(p_icon, MATERIAL_SYMBOLS_SKIP_PREVIOUS);
+    lv_obj_set_style_text_color(p_icon, C_TEXT, 0);
+    lv_obj_center(p_icon);
+    lv_obj_add_event_cb(prev_btn, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self && self->callbacks_.ble_music_control) self->callbacks_.ble_music_control(2); // PREV
+        if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    }, LV_EVENT_CLICKED, this);
+
+    // Play/Pause Button
+    lv_obj_t* play_btn = lv_btn_create(card);
+    lv_obj_set_size(play_btn, 52, 42);
+    lv_obj_set_pos(play_btn, center_btn_x - 26, btn_y - 3);
+    StyleButton(play_btn, C_AMBER, C_AMBER, 10);
+    lv_obj_t* play_icon = lv_label_create(play_btn);
+    lv_obj_set_style_text_font(play_icon, FONT_ICON, 0);
+    lv_label_set_text(play_icon, playing ? MATERIAL_SYMBOLS_PAUSE : MATERIAL_SYMBOLS_PLAY_ARROW);
+    lv_obj_set_style_text_color(play_icon, C_BG, 0);
+    lv_obj_center(play_icon);
+    lv_obj_add_event_cb(play_btn, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self && self->callbacks_.ble_music_control) self->callbacks_.ble_music_control(1); // TOGGLE PLAY/PAUSE
+        if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    }, LV_EVENT_CLICKED, this);
+
+    // Next Button
+    lv_obj_t* next_btn = lv_btn_create(card);
+    lv_obj_set_size(next_btn, btn_w, btn_h);
+    lv_obj_set_pos(next_btn, center_btn_x + 24, btn_y);
+    StyleButton(next_btn, C_PANEL_2, C_BORDER, 8);
+    lv_obj_t* n_icon = lv_label_create(next_btn);
+    lv_obj_set_style_text_font(n_icon, FONT_ICON, 0);
+    lv_label_set_text(n_icon, MATERIAL_SYMBOLS_SKIP_NEXT);
+    lv_obj_set_style_text_color(n_icon, C_TEXT, 0);
+    lv_obj_center(n_icon);
+    lv_obj_add_event_cb(next_btn, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self && self->callbacks_.ble_music_control) self->callbacks_.ble_music_control(3); // NEXT
+        if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    }, LV_EVENT_CLICKED, this);
+
+    // Volume Buttons
+    int vol_y = is_land ? 122 : 180;
+    MakeButton(card, "VOL -", center_btn_x - 56, vol_y, 50, 26, C_PANEL_2, C_BORDER, C_TEXT, FONT_10, [](lv_event_t* e) {
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self && self->callbacks_.ble_music_control) self->callbacks_.ble_music_control(5); // VOL DOWN
+        if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    }, this);
+
+    MakeButton(card, "VOL +", center_btn_x + 6, vol_y, 50, 26, C_PANEL_2, C_BORDER, C_TEXT, FONT_10, [](lv_event_t* e) {
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self && self->callbacks_.ble_music_control) self->callbacks_.ble_music_control(4); // VOL UP
+        if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    }, this);
+
+    MakeBottomNav(root, PAGE_BT_MUSIC);
+}
+
+void NovaDisplay::BuildNotif() {
+    lv_obj_t* root = NewRoot();
+    MakeHeader(root, "NOTIFIKASI HP");
+
+    int notif_count = callbacks_.get_ble_notif_count ? callbacks_.get_ble_notif_count() : 0;
+    bool is_land = (width_ > 240);
+    int content_w = is_land ? 304 : 224;
+    int content_x = (width_ - content_w) / 2;
+
+    if (notif_count == 0) {
+        // Empty state card
+        int card_y = 38;
+        int card_h = is_land ? 164 : 236;
+        lv_obj_t* card = MakePanel(root, content_x, card_y, content_w, card_h, C_PANEL, C_CYAN, 12);
+        MakeIcon(card, ICON_CHAT, is_land ? 20 : (content_w / 2 - 24), is_land ? 30 : 40, C_CYAN, 48);
+
+        int text_x = is_land ? 80 : 10;
+        int text_w = is_land ? (content_w - 90) : (content_w - 20);
+
+        MakeCenteredLabel(card, "Tidak Ada Notifikasi", text_x, is_land ? 36 : 100, text_w, 24, FONT_16, C_TEXT);
+        MakeCenteredLabel(card, "Notifikasi baru dari HP (WhatsApp, Telegram, SMS, dll)\nakan langsung tampil di sini dan di jidat layar.", 
+                          text_x, is_land ? 66 : 130, text_w, 48, FONT_10, C_MUTED);
+    } else {
+        // Scrollable list container
+        int list_y = 36;
+        int list_h = height_ - 67;
+        lv_obj_t* list = lv_obj_create(root);
+        lv_obj_set_pos(list, content_x, list_y);
+        lv_obj_set_size(list, content_w, list_h);
+        lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 70, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_scroll_dir(list, LV_DIR_VER);
+
+        // Header action: Total count badge + "Hapus Semua" button
+        lv_obj_t* hbar = lv_obj_create(list);
+        lv_obj_set_pos(hbar, 0, 0);
+        lv_obj_set_size(hbar, content_w, 32);
+        lv_obj_set_style_bg_color(hbar, lv_color_hex(0x0F172A), 0);
+        lv_obj_set_style_border_color(hbar, C_BORDER, 0);
+        lv_obj_set_style_border_width(hbar, 1, 0);
+        lv_obj_set_style_radius(hbar, 8, 0);
+        lv_obj_set_style_pad_all(hbar, 4, 0);
+        lv_obj_clear_flag(hbar, LV_OBJ_FLAG_SCROLLABLE);
+
+        char cnt_str[32];
+        snprintf(cnt_str, sizeof(cnt_str), "%d Notifikasi HP", notif_count);
+        MakeLabel(hbar, cnt_str, 8, 6, content_w - 110, 18, FONT_12, C_CYAN);
+
+        MakeButton(hbar, "🗑 HAPUS", content_w - 92, 2, 86, 26, 
+                   lv_color_hex(0x3B1219), lv_color_hex(0xEF4444), lv_color_hex(0xEF4444), FONT_10,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       if (self && self->callbacks_.clear_ble_notifs) {
+                           self->callbacks_.clear_ble_notifs();
+                           self->BuildNotif();
+                       }
+                   }, this);
+
+        // Notification Cards
+        int cur_y = 38;
+        for (int i = 0; i < notif_count; ++i) {
+            std::string app, title, msg, time;
+            if (!callbacks_.get_ble_notif_at || !callbacks_.get_ble_notif_at(i, app, title, msg, time)) {
+                continue;
+            }
+
+            uint32_t border_color = 0x38BDF8;
+            if (app.find("WhatsApp") != std::string::npos || app.find("WA") != std::string::npos) border_color = 0x10B981;
+            else if (app.find("Telegram") != std::string::npos) border_color = 0x0284C7;
+            else if (app.find("Instagram") != std::string::npos) border_color = 0xEC4899;
+            else if (app.find("YouTube") != std::string::npos) border_color = 0xEF4444;
+
+            int ncard_h = 88;
+            lv_obj_t* ncard = MakePanel(list, 0, cur_y, content_w, ncard_h, C_PANEL, lv_color_hex(border_color), 10);
+            lv_obj_clear_flag(ncard, LV_OBJ_FLAG_SCROLLABLE);
+
+            // Badge row
+            MakeIcon(ncard, ICON_CHAT, 8, 8, lv_color_hex(border_color), 18);
+            std::string a_str = app.empty() ? "Aplikasi" : app;
+            MakeLabel(ncard, a_str.c_str(), 28, 8, content_w - 88, 16, FONT_12, lv_color_hex(border_color));
+            if (!time.empty()) {
+                MakeLabel(ncard, time.c_str(), content_w - 56, 8, 48, 16, FONT_10, C_MUTED);
+            }
+
+            // Sender / Subject
+            lv_obj_t* s_lbl = MakeLabel(ncard, title.empty() ? "(Tanpa Subjek)" : title.c_str(), 10, 28, content_w - 20, 20, FONT_14, C_TEXT);
+            lv_label_set_long_mode(s_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+            // Body
+            lv_obj_t* b_lbl = MakeLabel(ncard, msg.empty() ? "(Pesan kosong)" : msg.c_str(), 10, 48, content_w - 20, 34, FONT_12, C_MUTED);
+            lv_label_set_long_mode(b_lbl, LV_LABEL_LONG_DOT);
+
+            cur_y += ncard_h + 8;
+        }
+    }
+
+    MakeBottomNav(root, PAGE_NOTIF);
+}
+
+void NovaDisplay::BuildWeather() {
+    lv_obj_t* root = NewRoot();
+    MakeHeader(root, "CUACA HP");
+
+    float temp = 0;
+    std::string cond = "--";
+    int hum = 0;
+    std::string loc = "Lokasi HP";
+    int high = 0, low = 0;
+    bool has_w = false;
+    if (callbacks_.get_ble_weather_full) {
+        has_w = callbacks_.get_ble_weather_full(temp, cond, hum, loc, high, low);
+    } else if (callbacks_.get_ble_weather) {
+        has_w = callbacks_.get_ble_weather(temp, cond, hum);
+    }
+
+    bool is_land = (width_ > 240);
+    int content_w = is_land ? 304 : 224;
+    int content_x = (width_ - content_w) / 2;
+
+    int card_y = 38;
+    int card_h = is_land ? 164 : 236;
+    lv_obj_t* card = MakePanel(root, content_x, card_y, content_w, card_h, C_PANEL, C_AMBER, 12);
+
+    // Weather Icon
+    MakeIcon(card, ICON_WEATHER, is_land ? 16 : (content_w / 2 - 24), is_land ? 16 : 14, C_AMBER, is_land ? 36 : 42);
+
+    char temp_str[32];
+    if (has_w) {
+        snprintf(temp_str, sizeof(temp_str), "%.0f\xC2\xB0" "C", temp);
+    } else {
+        snprintf(temp_str, sizeof(temp_str), "--\xC2\xB0" "C");
+    }
+
+    int text_x = is_land ? 60 : 0;
+    int text_w = is_land ? (content_w - 70) : content_w;
+
+    // Location / City Name
+    std::string loc_str = loc.empty() ? "Smartphone Lokasi" : loc;
+    lv_obj_t* loc_lbl = MakeCenteredLabel(card, loc_str.c_str(), text_x, is_land ? 12 : 58, text_w, 20, FONT_14, C_CYAN);
+    lv_label_set_long_mode(loc_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+    // Big Temperature
+    MakeCenteredLabel(card, temp_str, text_x, is_land ? 34 : 78, text_w, 36, FONT_36, C_AMBER);
+
+    // Condition
+    std::string c_str = cond.empty() ? "Menghubungkan ke HP..." : cond;
+    lv_obj_t* cond_lbl = MakeCenteredLabel(card, c_str.c_str(), text_x, is_land ? 72 : 118, text_w, 20, FONT_14, C_TEXT);
+    lv_label_set_long_mode(cond_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+    // Temperature Range & Humidity Cards
+    char stat_str[64];
+    if (high > 0 || low > 0) {
+        snprintf(stat_str, sizeof(stat_str), "Min %d\xC2\xB0 | Max %d\xC2\xB0  •  Kelembapan %d%%", low, high, hum);
+    } else {
+        snprintf(stat_str, sizeof(stat_str), "Kelembapan Udara: %d%%", hum);
+    }
+    MakeCenteredLabel(card, stat_str, 0, is_land ? 98 : 146, content_w, 18, FONT_12, C_CYAN);
+
+    // Refresh Button
+    MakeButton(card, "🔄 SINKRONISASI CUACA HP", (content_w - 180) / 2, is_land ? 124 : 180, 180, 32,
+               lv_color_hex(0x13382C), C_MINT, C_MINT, FONT_10,
+               [](lv_event_t* e) {
+                   auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                   if (self && self->callbacks_.ble_sync_request) {
+                       self->callbacks_.ble_sync_request();
+                   }
+                   if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                   if (self) self->BuildWeather();
+               }, this);
+
+    MakeBottomNav(root, PAGE_WEATHER);
+}
+
+void NovaDisplay::BuildPhone() {
+    lv_obj_t* root = NewRoot();
+    MakeHeader(root, "STATUS & KONTROL HP");
+
+    int bat = 0;
+    bool chg = false;
+    std::string net;
+    bool has_p = false;
+    if (callbacks_.get_ble_phone) {
+        has_p = callbacks_.get_ble_phone(bat, chg, net);
+    }
+
+    bool is_land = (width_ > 240);
+    int content_w = is_land ? 304 : 224;
+    int content_x = (width_ - content_w) / 2;
+
+    // 1. Phone Status Card (Battery & Network)
+    lv_obj_t* scard = MakePanel(root, content_x, 38, content_w, is_land ? 62 : 72, C_PANEL, C_MINT, 12);
+    MakeIcon(scard, ICON_PHONE, 10, is_land ? 10 : 14, C_MINT, 28);
+
+    char bat_txt[64];
+    if (has_p) {
+        snprintf(bat_txt, sizeof(bat_txt), "Baterai HP: %d%% %s", bat, chg ? "(Mengisi Daya)" : "");
+    } else {
+        snprintf(bat_txt, sizeof(bat_txt), "Baterai HP: Tersambung via BLE");
+    }
+    MakeLabel(scard, bat_txt, 46, 10, content_w - 56, 18, FONT_14, C_TEXT);
+
+    std::string net_txt = "Jaringan: " + (net.empty() ? "Aktif (Chronos Connected)" : net);
+    MakeLabel(scard, net_txt.c_str(), 46, 32, content_w - 56, 16, FONT_12, C_CYAN);
+
+    // 2. Actions Card (Dering HP, Remote Kamera, Sinkronisasi)
+    int act_y = is_land ? 104 : 116;
+    int act_h = is_land ? 100 : 166;
+    lv_obj_t* acard = MakePanel(root, content_x, act_y, content_w, act_h, C_PANEL, lv_color_hex(0xEF4444), 12);
+
+    static bool is_ringing = false;
+
+    if (is_land) {
+        // Landscape 2-column layout:
+        int btn_w = (content_w - 24) / 2;
+
+        // Col 1, Row 1: Bunyikan HP
+        MakeButton(acard, is_ringing ? "BUNYIKAN LAGI" : "BUNYIKAN HP", 
+                   8, 10, btn_w, 36,
+                   lv_color_hex(0x13382C), C_MINT, C_MINT, FONT_10,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       is_ringing = true;
+                       if (self && self->callbacks_.ble_find_phone) self->callbacks_.ble_find_phone(true);
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                       if (self) self->BuildPhone();
+                   }, this);
+
+        // Col 2, Row 1: Hentikan Dering
+        MakeButton(acard, "HENTIKAN DERING", 
+                   16 + btn_w, 10, btn_w, 36,
+                   lv_color_hex(0x3B1219), lv_color_hex(0xEF4444), lv_color_hex(0xEF4444), FONT_10,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       is_ringing = false;
+                       if (self && self->callbacks_.ble_find_phone) self->callbacks_.ble_find_phone(false);
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                       if (self) self->BuildPhone();
+                   }, this);
+
+        // Col 1, Row 2: Shutter Kamera
+        MakeButton(acard, "📸 JEPRET FOTO HP", 
+                   8, 52, btn_w, 36,
+                   lv_color_hex(0x1E1B4B), lv_color_hex(0x818CF8), lv_color_hex(0x818CF8), FONT_10,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       if (self && self->callbacks_.ble_capture_photo) self->callbacks_.ble_capture_photo();
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                   }, this);
+
+        // Col 2, Row 2: Sinkronisasi
+        MakeButton(acard, "🔄 SINKRON HP", 
+                   16 + btn_w, 52, btn_w, 36,
+                   lv_color_hex(0x164E63), C_CYAN, C_CYAN, FONT_10,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       if (self && self->callbacks_.ble_sync_request) self->callbacks_.ble_sync_request();
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                       if (self) self->BuildPhone();
+                   }, this);
+    } else {
+        // Portrait vertical layout:
+        int btn_w = content_w - 20;
+
+        // Button 1: BUNYIKAN HP
+        MakeButton(acard, is_ringing ? "BUNYIKAN LAGI HP" : "BUNYIKAN / DERINGKAN HP", 
+                   10, 10, btn_w, 34,
+                   lv_color_hex(0x13382C), C_MINT, C_MINT, FONT_12,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       is_ringing = true;
+                       if (self && self->callbacks_.ble_find_phone) self->callbacks_.ble_find_phone(true);
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                       if (self) self->BuildPhone();
+                   }, this);
+
+        // Button 2: HENTIKAN DERING
+        MakeButton(acard, "HENTIKAN DERING", 
+                   10, 48, btn_w, 32,
+                   lv_color_hex(0x3B1219), lv_color_hex(0xEF4444), lv_color_hex(0xEF4444), FONT_12,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       is_ringing = false;
+                       if (self && self->callbacks_.ble_find_phone) self->callbacks_.ble_find_phone(false);
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                       if (self) self->BuildPhone();
+                   }, this);
+
+        // Button 3: SHUTTER KAMERA HP
+        MakeButton(acard, "📸 AMBIL FOTO HP (SHUTTER)", 
+                   10, 84, btn_w, 32,
+                   lv_color_hex(0x1E1B4B), lv_color_hex(0x818CF8), lv_color_hex(0x818CF8), FONT_10,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       if (self && self->callbacks_.ble_capture_photo) self->callbacks_.ble_capture_photo();
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                   }, this);
+
+        // Button 4: SINKRONISASI HP
+        MakeButton(acard, "🔄 SINKRONISASI DATA HP", 
+                   10, 120, btn_w, 32,
+                   lv_color_hex(0x164E63), C_CYAN, C_CYAN, FONT_10,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       if (self && self->callbacks_.ble_sync_request) self->callbacks_.ble_sync_request();
+                       if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                       if (self) self->BuildPhone();
+                   }, this);
+    }
+
+    MakeBottomNav(root, PAGE_PHONE);
+}
+
+void NovaDisplay::UpdateNavData(const std::string& dist, const std::string& dir, const std::string& title,
+                               const std::string& dur, const std::string& eta, const std::string& spd, bool active,
+                               const std::string& maneuver, bool has_icon, const uint8_t* icon_data) {
+    lvgl_port_lock(0);
+    last_nav_maneuver_ = maneuver;
+    last_nav_has_icon_ = has_icon;
+    if (has_icon && icon_data) {
+        memcpy(last_nav_icon_data_, icon_data, 288);
+    }
+    if (current_page_ == PAGE_NAV) {
+        BuildNav();
+    }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::UpdateBtMusicData(const std::string& title, const std::string& artist, bool playing) {
+    lvgl_port_lock(0);
+    if (current_page_ == PAGE_BT_MUSIC) {
+        BuildBtMusic();
+    }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::ShowIncomingCallAlert(const std::string& caller, bool active) {
+    lvgl_port_lock(0);
+    lv_obj_t* top = lv_layer_top();
+    if (!top) {
+        lvgl_port_unlock();
+        return;
+    }
+
+    if (call_alert_modal_) {
+        lv_obj_del(call_alert_modal_);
+        call_alert_modal_ = nullptr;
+    }
+
+    if (!active) {
+        lvgl_port_unlock();
+        return;
+    }
+
+    int modal_w = width_ - 20;
+    int modal_h = (height_ < 260) ? 96 : 110;
+    call_alert_modal_ = lv_obj_create(top);
+    lv_obj_set_pos(call_alert_modal_, 10, (height_ < 260) ? 10 : 20);
+    lv_obj_set_size(call_alert_modal_, modal_w, modal_h);
+    lv_obj_set_style_radius(call_alert_modal_, 14, 0);
+    lv_obj_set_style_bg_color(call_alert_modal_, lv_color_hex(0x064E3B), 0);
+    lv_obj_set_style_bg_opa(call_alert_modal_, LV_OPA_90, 0);
+    lv_obj_set_style_border_color(call_alert_modal_, lv_color_hex(0x10B981), 0);
+    lv_obj_set_style_border_width(call_alert_modal_, 3, 0);
+    lv_obj_set_style_pad_all(call_alert_modal_, 8, 0);
+    lv_obj_clear_flag(call_alert_modal_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_move_foreground(call_alert_modal_);
+
+    MakeIcon(call_alert_modal_, ICON_PHONE, 10, 10, lv_color_hex(0x10B981), 32);
+
+    lv_obj_t* title = MakeLabel(call_alert_modal_, "📞 PANGGILAN TELEPON MASUK", 50, 8, modal_w - 60, 20, FONT_14, lv_color_hex(0x10B981));
+    lv_label_set_long_mode(title, LV_LABEL_LONG_DOT);
+
+    std::string cname = caller.empty() ? "Panggilan Suara" : caller;
+    lv_obj_t* clbl = MakeLabel(call_alert_modal_, cname.c_str(), 50, 32, modal_w - 60, 24, FONT_16, C_TEXT);
+    lv_label_set_long_mode(clbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+    MakeButton(call_alert_modal_, "TUTUP PERINGATAN", 
+               modal_w - 140, modal_h - 38, 130, 28,
+               lv_color_hex(0x047857), lv_color_hex(0x10B981), C_TEXT, FONT_10,
+               [](lv_event_t* e) {
+                   auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                   if (self) self->ShowIncomingCallAlert("", false);
+               }, this);
+
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::ShowFindWatchAlert(bool active) {
+    lvgl_port_lock(0);
+    lv_obj_t* top = lv_layer_top();
+    if (!top) {
+        lvgl_port_unlock();
+        return;
+    }
+
+    if (find_watch_modal_) {
+        lv_obj_del(find_watch_modal_);
+        find_watch_modal_ = nullptr;
+    }
+
+    if (!active) {
+        lvgl_port_unlock();
+        return;
+    }
+
+    int modal_w = width_ - 24;
+    int modal_h = (height_ < 260) ? 120 : 140;
+    find_watch_modal_ = lv_obj_create(top);
+    lv_obj_center(find_watch_modal_);
+    lv_obj_set_size(find_watch_modal_, modal_w, modal_h);
+    lv_obj_set_style_radius(find_watch_modal_, 16, 0);
+    lv_obj_set_style_bg_color(find_watch_modal_, lv_color_hex(0x450A0A), 0);
+    lv_obj_set_style_bg_opa(find_watch_modal_, LV_OPA_90, 0);
+    lv_obj_set_style_border_color(find_watch_modal_, lv_color_hex(0xEF4444), 0);
+    lv_obj_set_style_border_width(find_watch_modal_, 3, 0);
+    lv_obj_set_style_pad_all(find_watch_modal_, 10, 0);
+    lv_obj_clear_flag(find_watch_modal_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_move_foreground(find_watch_modal_);
+
+    MakeCenteredLabel(find_watch_modal_, "🔔 SMARTPHONE MENCARI ANDA! 🔔", 0, 10, modal_w - 20, 22, FONT_14, lv_color_hex(0xEF4444));
+    MakeCenteredLabel(find_watch_modal_, "Perangkat ini sedang dibunyikan dari HP", 0, 36, modal_w - 20, 18, FONT_12, C_TEXT);
+
+    MakeButton(find_watch_modal_, "SAYA DI SINI (HENTIKAN)", 
+               (modal_w - 180) / 2, modal_h - 46, 170, 34,
+               lv_color_hex(0xDC2626), lv_color_hex(0xFCA5A5), C_TEXT, FONT_12,
+               [](lv_event_t* e) {
+                   auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                   if (self) {
+                       self->ShowFindWatchAlert(false);
+                   }
+               }, this);
+
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::UpdateWeatherFull(float temp, const std::string& cond, int hum, const std::string& loc, int high, int low) {
+    lvgl_port_lock(0);
+    if (current_page_ == PAGE_WEATHER) {
+        BuildWeather();
+    }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::UpdatePhoneStatus(int bat, bool chg, const std::string& net) {
+    lvgl_port_lock(0);
+    if (current_page_ == PAGE_PHONE) {
+        BuildPhone();
+    }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::UpdateNotif() {
+    lvgl_port_lock(0);
+    if (current_page_ == PAGE_NOTIF) {
+        BuildNotif();
+    }
+    lvgl_port_unlock();
+}

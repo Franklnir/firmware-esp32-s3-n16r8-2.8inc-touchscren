@@ -27,6 +27,21 @@ struct OnlineSongItem {
 
 struct NovaCallbacks {
     std::function<void(int mode)> switch_mode;
+    std::function<void(int screen)> launch_chronchi_screen;
+    std::function<void(int cmd)> ble_music_control;
+    std::function<void(bool ring)> ble_find_phone;
+    std::function<bool(std::string& title, std::string& artist, bool& playing)> get_ble_music;
+    std::function<bool(std::string& dist, std::string& dir, std::string& title, std::string& dur, std::string& eta, std::string& spd, bool& active)> get_ble_nav;
+    std::function<void(std::string& maneuver, bool& has_icon, const uint8_t*& icon_data)> get_ble_nav_extra;
+    std::function<bool(float& temp, std::string& cond, int& hum)> get_ble_weather;
+    std::function<bool(int& bat, bool& chg, std::string& net)> get_ble_phone;
+    std::function<bool(std::string& app, std::string& title, std::string& msg, std::string& time)> get_ble_notif;
+    std::function<bool()> ble_capture_photo;
+    std::function<void()> ble_sync_request;
+    std::function<int()> get_ble_notif_count;
+    std::function<bool(int idx, std::string& app, std::string& title, std::string& msg, std::string& time)> get_ble_notif_at;
+    std::function<void()> clear_ble_notifs;
+    std::function<bool(float& temp, std::string& cond, int& hum, std::string& loc, int& high, int& low)> get_ble_weather_full;
     std::function<void(uint8_t brightness)> set_brightness;
     std::function<void(int volume)> set_volume;
     std::function<int()> get_volume;
@@ -84,7 +99,12 @@ public:
         PAGE_RACER,
         PAGE_PIANO,
         PAGE_SKETCH,
-        PAGE_MONITOR
+        PAGE_MONITOR,
+        PAGE_NAV,
+        PAGE_BT_MUSIC,
+        PAGE_NOTIF,
+        PAGE_WEATHER,
+        PAGE_PHONE
     };
 
     enum IconKind : uint8_t {
@@ -106,7 +126,11 @@ public:
         ICON_RADIO,
         ICON_PIANO,
         ICON_DRAW,
-        ICON_DASHBOARD
+        ICON_DASHBOARD,
+        ICON_NAV,
+        ICON_CHAT,
+        ICON_WEATHER,
+        ICON_PHONE
     };
 
     NovaDisplay(const NovaCallbacks& callbacks);
@@ -240,6 +264,25 @@ public:
     void SetBatteryStyle(uint8_t style);
     uint8_t GetBatteryStyle() const { return bat_style_; }
 
+    void ShowNotificationBanner(const std::string& app, const std::string& title, const std::string& message);
+    void DismissNotificationBanner();
+
+    void ShowBtMusicModal();
+    void ShowNavModal();
+    void ShowNotifCenterModal();
+    void ShowWeatherModal();
+    void ShowPhoneModal();
+
+    void UpdateNavData(const std::string& dist, const std::string& dir, const std::string& title,
+                       const std::string& dur, const std::string& eta, const std::string& spd, bool active,
+                       const std::string& maneuver = "", bool has_icon = false, const uint8_t* icon_data = nullptr);
+    void UpdateBtMusicData(const std::string& title, const std::string& artist, bool playing);
+    void ShowIncomingCallAlert(const std::string& caller, bool active);
+    void ShowFindWatchAlert(bool active);
+    void UpdateWeatherFull(float temp, const std::string& cond, int hum, const std::string& loc, int high, int low);
+    void UpdatePhoneStatus(int bat, bool chg, const std::string& net);
+    void UpdateNotif();
+
 private:
     NovaCallbacks callbacks_;
     int width_ = 240;
@@ -339,6 +382,8 @@ private:
 
     void AppTile(lv_obj_t* root, int x, int y, const char* name,
                  const char* description, IconKind icon, lv_color_t accent, Page destination);
+    void ChronchiTile(lv_obj_t* root, int x, int y, const char* name,
+                     const char* description, IconKind icon, lv_color_t accent, int screen);
     void SettingsRow(lv_obj_t* root, int y, const char* name,
                      const char* detail, IconKind icon, lv_color_t accent, Page target);
     lv_obj_t* MakeBrightnessSlider(lv_obj_t* parent, int x, int y, int width);
@@ -367,6 +412,11 @@ private:
     void BuildBrick();
     void BuildMinesweeper();
     void BuildRacer();
+    void BuildNav();
+    void BuildBtMusic();
+    void BuildNotif();
+    void BuildWeather();
+    void BuildPhone();
     void BuildCurrentPage();
 
     void ShowFileModal(const std::string& filename, size_t size);
@@ -377,6 +427,29 @@ private:
     void ShowOnlinePlayerModal(const std::string& title, const std::string& video_id, const std::string& duration = "");
     void ShowAudioPlayerModal(const std::string& title, const std::string& source, bool is_online, size_t file_size = 0, const std::string& duration = "");
     lv_obj_t* online_modal_ = nullptr;
+
+
+
+    lv_obj_t* notif_banner_ = nullptr;
+    lv_obj_t* call_alert_modal_ = nullptr;
+    lv_obj_t* find_watch_modal_ = nullptr;
+    lv_timer_t* notif_banner_timer_ = nullptr;
+
+    lv_obj_t* bt_music_modal_ = nullptr;
+    lv_obj_t* bt_music_title_ = nullptr;
+    lv_obj_t* bt_music_artist_ = nullptr;
+    lv_obj_t* bt_music_play_lbl_ = nullptr;
+
+    lv_obj_t* nav_modal_ = nullptr;
+    lv_obj_t* nav_modal_dist_ = nullptr;
+    lv_obj_t* nav_modal_dir_ = nullptr;
+    lv_obj_t* nav_modal_title_ = nullptr;
+    uint8_t* nav_icon_buf_ = nullptr;
+    lv_image_dsc_t nav_icon_dsc_;
+    std::string last_nav_maneuver_ = "";
+    bool last_nav_has_icon_ = false;
+    uint8_t last_nav_icon_data_[288] = {0};
+    void RenderNavIcon(const std::string& maneuver, const std::string& directions, bool has_icon, const uint8_t* icon_data);
 
     int file_hub_filter_ = 1; // 1: Folder Musik (/sdcard/music), 0: Semua Berkas (/sdcard)
 

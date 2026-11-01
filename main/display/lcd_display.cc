@@ -3793,8 +3793,10 @@ void LcdDisplay::PopulateWifiScanResults(const std::vector<std::tuple<std::strin
 
         lv_obj_t* icon = lv_label_create(left_box);
         lv_obj_set_style_text_font(icon, &BUILTIN_ICON_FONT, 0);
-        lv_label_set_text(icon, MATERIAL_SYMBOLS_WIFI);
-        lv_obj_set_style_text_color(icon, lv_color_hex(rssi > -65 ? 0x22C55E : (rssi > -80 ? 0xEAB308 : 0xEF4444)), 0);
+        const char* wifi_glyph = (rssi >= -65) ? MATERIAL_SYMBOLS_WIFI :
+                                 ((rssi >= -78) ? MATERIAL_SYMBOLS_WIFI_2_BAR : MATERIAL_SYMBOLS_WIFI_1_BAR);
+        lv_label_set_text(icon, wifi_glyph);
+        lv_obj_set_style_text_color(icon, lv_color_hex(rssi >= -65 ? 0x22C55E : (rssi >= -78 ? 0xEAB308 : 0xEF4444)), 0);
 
         lv_obj_t* name = lv_label_create(left_box);
         lv_obj_set_style_text_font(name, text_font, 0);
