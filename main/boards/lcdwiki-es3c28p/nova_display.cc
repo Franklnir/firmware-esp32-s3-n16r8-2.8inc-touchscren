@@ -1,3 +1,33 @@
+
+#include <cstdint>
+#include <cstddef>
+
+enum qrcodegen_Ecc {
+    qrcodegen_Ecc_LOW = 0,
+    qrcodegen_Ecc_MEDIUM,
+    qrcodegen_Ecc_QUARTILE,
+    qrcodegen_Ecc_HIGH
+};
+enum qrcodegen_Mask {
+    qrcodegen_Mask_AUTO = -1,
+    qrcodegen_Mask_0 = 0,
+    qrcodegen_Mask_1,
+    qrcodegen_Mask_2,
+    qrcodegen_Mask_3,
+    qrcodegen_Mask_4,
+    qrcodegen_Mask_5,
+    qrcodegen_Mask_6,
+    qrcodegen_Mask_7
+};
+#define qrcodegen_BUFFER_LEN_FOR_VERSION(n)  ((((n) * 4 + 17) * ((n) * 4 + 17) + 7) / 8 + 1)
+extern "C" {
+bool qrcodegen_encodeText(const char *text, uint8_t tempBuffer[], uint8_t qrcode[],
+                          enum qrcodegen_Ecc ecl, int minVersion, int maxVersion,
+                          enum qrcodegen_Mask mask, bool boostEcl);
+int qrcodegen_getSize(const uint8_t qrcode[]);
+bool qrcodegen_getModule(const uint8_t qrcode[], int x, int y);
+}
+
 #include "nova_display.h"
 
 #include <esp_log.h>
@@ -1723,13 +1753,13 @@ void NovaDisplay::ShowBluetoothModal() {
     lv_obj_set_size(bt_modal_, width_, height_);
     lv_obj_clear_flag(bt_modal_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(bt_modal_, lv_color_black(), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(bt_modal_, LV_OPA_70, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(bt_modal_, LV_OPA_80, LV_PART_MAIN);
     lv_obj_set_style_border_width(bt_modal_, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(bt_modal_, 0, LV_PART_MAIN);
 
     bool is_land = (width_ > 240);
-    int card_w = is_land ? 280 : 216;
-    int card_h = is_land ? 220 : 230;
+    int card_w = is_land ? 300 : 224;
+    int card_h = is_land ? 216 : 286;
 
     lv_obj_t* card = MakePanel(bt_modal_, 0, 0, card_w, card_h, lv_color_hex(0x18181B), lv_color_hex(0x38BDF8), 12);
     lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
@@ -1738,18 +1768,18 @@ void NovaDisplay::ShowBluetoothModal() {
     lv_obj_t* h_icon = lv_label_create(card);
     lv_obj_set_style_text_font(h_icon, FONT_ICON, LV_PART_MAIN);
     lv_label_set_text(h_icon, MATERIAL_SYMBOLS_BLUETOOTH);
-    lv_obj_set_style_text_color(h_icon, ble_conn ? lv_color_hex(0x38BDF8) : lv_color_hex(0x94A3B8), LV_PART_MAIN);
+    lv_obj_set_style_text_color(h_icon, ble_conn ? lv_color_hex(0x22C55E) : lv_color_hex(0x38BDF8), LV_PART_MAIN);
     lv_obj_set_pos(h_icon, 10, 8);
 
     lv_obj_t* h_title = lv_label_create(card);
-    lv_obj_set_style_text_font(h_title, FONT_14, LV_PART_MAIN);
+    lv_obj_set_style_text_font(h_title, FONT_12, LV_PART_MAIN);
     lv_obj_set_style_text_color(h_title, lv_color_white(), LV_PART_MAIN);
-    lv_label_set_text(h_title, "BLUETOOTH BLE");
-    lv_obj_set_pos(h_title, 32, 10);
+    lv_label_set_text(h_title, "PAIRING APP CHRONOS");
+    lv_obj_set_pos(h_title, 30, 8);
 
     lv_obj_t* close_btn = lv_btn_create(card);
-    lv_obj_set_size(close_btn, 26, 24);
-    lv_obj_set_pos(close_btn, card_w - 36, 6);
+    lv_obj_set_size(close_btn, 24, 22);
+    lv_obj_set_pos(close_btn, card_w - 30, 6);
     StyleButton(close_btn, lv_color_hex(0x3F3F46), lv_color_hex(0x52525B), 6);
     lv_obj_t* close_lbl = lv_label_create(close_btn);
     lv_obj_set_style_text_font(close_lbl, FONT_ICON, LV_PART_MAIN);
@@ -1764,37 +1794,144 @@ void NovaDisplay::ShowBluetoothModal() {
         }
     }, LV_EVENT_CLICKED, this);
 
-    // Status Panel
-    lv_obj_t* spanel = MakePanel(card, 10, 36, card_w - 20, is_land ? 46 : 50, lv_color_hex(0x27272A), lv_color_hex(0x3F3F46), 8);
-    MakeLabel(spanel, "STATUS KONEKSI", 10, 4, card_w - 40, 14, FONT_10, C_MUTED);
-    MakeLabel(spanel, ble_conn ? "● Terhubung ke Ponsel" : "○ Siap / Siaran Aktif", 10, 20, card_w - 40, 20, FONT_12,
-              ble_conn ? lv_color_hex(0x22C55E) : lv_color_hex(0x38BDF8));
+    // Render High-Contrast QR Code Encoding BLE MAC Address for instant Chronos pairing
+    struct QrModalData {
+        uint16_t* img_buf = nullptr;
+        lv_image_dsc_t img_dsc = {};
+    };
+    auto* qmd = new QrModalData();
+    int qr_target_dim = is_land ? 116 : 120;
+    qmd->img_buf = (uint16_t*)heap_caps_malloc(qr_target_dim * qr_target_dim * sizeof(uint16_t),
+                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!qmd->img_buf) {
+        qmd->img_buf = (uint16_t*)malloc(qr_target_dim * qr_target_dim * sizeof(uint16_t));
+    }
 
-    // Info rows
-    char dev_info[48];
-    snprintf(dev_info, sizeof(dev_info), "Nama: %s", bname.c_str());
-    MakeLabel(card, dev_info, 12, is_land ? 88 : 94, card_w - 24, 16, FONT_12, lv_color_hex(0xFDE047));
+    if (qmd->img_buf) {
+        for (int i = 0; i < qr_target_dim * qr_target_dim; i++) {
+            qmd->img_buf[i] = 0xFFFF; // Pure white background
+        }
 
-    char mac_info[48];
-    snprintf(mac_info, sizeof(mac_info), "MAC: %s", bmac.c_str());
-    MakeLabel(card, mac_info, 12, is_land ? 108 : 114, card_w - 24, 16, FONT_10, C_MUTED);
+        uint8_t qrcode[qrcodegen_BUFFER_LEN_FOR_VERSION(10)];
+        uint8_t tempBuffer[qrcodegen_BUFFER_LEN_FOR_VERSION(10)];
+        const char* qr_text = bmac.c_str();
+        if (qrcodegen_encodeText(qr_text, tempBuffer, qrcode, qrcodegen_Ecc_LOW, 1, 10, qrcodegen_Mask_AUTO, true)) {
+            int qr_size = qrcodegen_getSize(qrcode);
+            int border = 2;
+            int total_modules = qr_size + border * 2;
+            int scale = qr_target_dim / total_modules;
+            if (scale < 1) scale = 1;
+            int offset_x = (qr_target_dim - (total_modules * scale)) / 2 + border * scale;
+            int offset_y = (qr_target_dim - (total_modules * scale)) / 2 + border * scale;
 
-    MakeLabel(card, "Aplikasi: Chronos (Android/iOS)", 12, is_land ? 126 : 134, card_w - 24, 16, FONT_10, lv_color_hex(0x93C5FD));
-
-    // Action button: Buka Mode Chronchi Watch
-    MakeButton(card, "BUKA CHRONCHI WATCH", 10, is_land ? 154 : 168, card_w - 20, 32, lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), lv_color_white(), FONT_12,
-        [](lv_event_t* e) {
-            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
-            if (self) {
-                if (self->bt_modal_) {
-                    lv_obj_del(self->bt_modal_);
-                    self->bt_modal_ = nullptr;
-                }
-                if (self->GetCallbacks().switch_mode) {
-                    self->GetCallbacks().switch_mode(1);
+            for (int y = 0; y < qr_size; y++) {
+                for (int x = 0; x < qr_size; x++) {
+                    if (qrcodegen_getModule(qrcode, x, y)) {
+                        int px_start = offset_x + x * scale;
+                        int py_start = offset_y + y * scale;
+                        for (int dy = 0; dy < scale; dy++) {
+                            int py = py_start + dy;
+                            if (py < 0 || py >= qr_target_dim) continue;
+                            for (int dx = 0; dx < scale; dx++) {
+                                int px = px_start + dx;
+                                if (px < 0 || px >= qr_target_dim) continue;
+                                qmd->img_buf[py * qr_target_dim + px] = 0x0000; // Black module
+                            }
+                        }
+                    }
                 }
             }
-        }, this);
+        }
+
+        memset(&qmd->img_dsc, 0, sizeof(qmd->img_dsc));
+        qmd->img_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+        qmd->img_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+        qmd->img_dsc.header.w = qr_target_dim;
+        qmd->img_dsc.header.h = qr_target_dim;
+        qmd->img_dsc.header.stride = qr_target_dim * 2;
+        qmd->img_dsc.data_size = qr_target_dim * qr_target_dim * 2;
+        qmd->img_dsc.data = (const uint8_t*)qmd->img_buf;
+
+        int qr_box_w = qr_target_dim + 8;
+        int qr_box_h = qr_target_dim + 8;
+        int qr_box_x = is_land ? 12 : (card_w - qr_box_w) / 2;
+        int qr_box_y = is_land ? 38 : 32;
+
+        lv_obj_t* qr_box = MakePanel(card, qr_box_x, qr_box_y, qr_box_w, qr_box_h, lv_color_white(), lv_color_hex(0x38BDF8), 8);
+        lv_obj_clear_flag(qr_box, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* qr_img = lv_image_create(qr_box);
+        lv_image_set_src(qr_img, &qmd->img_dsc);
+        lv_obj_center(qr_img);
+
+        lv_obj_add_event_cb(bt_modal_, [](lv_event_t* e) {
+            auto* d = static_cast<QrModalData*>(lv_event_get_user_data(e));
+            if (d) {
+                if (d->img_buf) {
+                    heap_caps_free(d->img_buf);
+                }
+                delete d;
+            }
+        }, LV_EVENT_DELETE, qmd);
+    }
+
+    if (!is_land) {
+        // Portrait info rows
+        char info_line[64];
+        snprintf(info_line, sizeof(info_line), "%s • %s", bname.c_str(), bmac.c_str());
+        MakeCenteredLabel(card, info_line, 0, 166, card_w - 20, 16, FONT_10, lv_color_hex(0xFDE047));
+
+        const char* st_txt = ble_conn ? "● TERHUBUNG DENGAN CHRONOS" : "○ SIAP DI-SCAN APP CHRONOS";
+        lv_color_t st_col = ble_conn ? lv_color_hex(0x22C55E) : lv_color_hex(0x38BDF8);
+        MakeCenteredLabel(card, st_txt, 0, 186, card_w - 20, 16, FONT_10, st_col);
+
+        MakeCenteredLabel(card, "Buka Chronos App di HP > Scan QR", 0, 204, card_w - 20, 16, FONT_10, C_MUTED);
+
+        MakeButton(card, "BUKA CHRONCHI WATCH", 12, 244, card_w - 24, 32,
+                   lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), lv_color_white(), FONT_12,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       if (self) {
+                           if (self->bt_modal_) {
+                               lv_obj_del(self->bt_modal_);
+                               self->bt_modal_ = nullptr;
+                           }
+                           if (self->GetCallbacks().switch_mode) {
+                               self->GetCallbacks().switch_mode(1);
+                           }
+                       }
+                   }, this);
+    } else {
+        // Landscape side-by-side
+        int rx = 146;
+        int rw = card_w - rx - 10;
+        char name_buf[48], mac_buf[48];
+        snprintf(name_buf, sizeof(name_buf), "Nama: %s", bname.c_str());
+        snprintf(mac_buf, sizeof(mac_buf), "MAC: %s", bmac.c_str());
+
+        MakeLabel(card, name_buf, rx, 38, rw, 16, FONT_12, lv_color_hex(0xFDE047));
+        MakeLabel(card, mac_buf, rx, 56, rw, 16, FONT_10, C_MUTED);
+
+        const char* st_txt = ble_conn ? "● Terhubung" : "○ Siap Di-Scan";
+        lv_color_t st_col = ble_conn ? lv_color_hex(0x22C55E) : lv_color_hex(0x38BDF8);
+        MakeLabel(card, st_txt, rx, 76, rw, 16, FONT_12, st_col);
+
+        MakeLabel(card, "Scan QR lewat Chronos App", rx, 96, rw, 32, FONT_10, lv_color_hex(0x93C5FD));
+
+        MakeButton(card, "CHRONCHI WATCH", rx, 168, rw, 32,
+                   lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), lv_color_white(), FONT_12,
+                   [](lv_event_t* e) {
+                       auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                       if (self) {
+                           if (self->bt_modal_) {
+                               lv_obj_del(self->bt_modal_);
+                               self->bt_modal_ = nullptr;
+                           }
+                           if (self->GetCallbacks().switch_mode) {
+                               self->GetCallbacks().switch_mode(1);
+                           }
+                       }
+                   }, this);
+    }
 }
 
 void NovaDisplay::CloseRgbMixerModal() {
@@ -9988,6 +10125,9 @@ void NovaDisplay::BuildNotif() {
             int ncard_h = 88;
             lv_obj_t* ncard = MakePanel(list, 0, cur_y, content_w, ncard_h, C_PANEL, lv_color_hex(border_color), 10);
             lv_obj_clear_flag(ncard, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_add_flag(ncard, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_set_style_bg_opa(ncard, LV_OPA_COVER, LV_STATE_PRESSED);
+            lv_obj_set_style_bg_color(ncard, lv_color_hex(0x1E293B), LV_STATE_PRESSED);
 
             // Badge row
             MakeIcon(ncard, ICON_CHAT, 8, 8, lv_color_hex(border_color), 18);
@@ -10002,8 +10142,27 @@ void NovaDisplay::BuildNotif() {
             lv_label_set_long_mode(s_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
             // Body
-            lv_obj_t* b_lbl = MakeLabel(ncard, msg.empty() ? "(Pesan kosong)" : msg.c_str(), 10, 48, content_w - 20, 34, FONT_12, C_MUTED);
+            lv_obj_t* b_lbl = MakeLabel(ncard, msg.empty() ? "(Pesan kosong)" : msg.c_str(), 10, 48, content_w - 76, 34, FONT_12, C_MUTED);
             lv_label_set_long_mode(b_lbl, LV_LABEL_LONG_DOT);
+
+            // Tap cue to indicate clickability
+            MakeLabel(ncard, "Detail >", content_w - 52, 64, 48, 14, FONT_10, lv_color_hex(0x38BDF8));
+
+            struct NotifClickCtx {
+                NovaDisplay* self;
+                int idx;
+            };
+            auto* ctx = new NotifClickCtx{this, i};
+            lv_obj_add_event_cb(ncard, [](lv_event_t* e) {
+                auto* ctx = static_cast<NotifClickCtx*>(lv_event_get_user_data(e));
+                if (ctx && ctx->self) {
+                    ctx->self->ShowNotificationDetail(ctx->idx);
+                }
+            }, LV_EVENT_CLICKED, ctx);
+            lv_obj_add_event_cb(ncard, [](lv_event_t* e) {
+                auto* ctx = static_cast<NotifClickCtx*>(lv_event_get_user_data(e));
+                delete ctx;
+            }, LV_EVENT_DELETE, ctx);
 
             cur_y += ncard_h + 8;
         }
@@ -10318,26 +10477,43 @@ void NovaDisplay::ShowFindWatchAlert(bool active) {
         return;
     }
 
-    int modal_w = width_ - 24;
-    int modal_h = (height_ < 260) ? 120 : 140;
+    bool is_land = (width_ > 240);
+    int modal_w = is_land ? 280 : 220;
+    int modal_h = is_land ? 160 : 176;
+
     find_watch_modal_ = lv_obj_create(top);
-    lv_obj_center(find_watch_modal_);
-    lv_obj_set_size(find_watch_modal_, modal_w, modal_h);
-    lv_obj_set_style_radius(find_watch_modal_, 16, 0);
-    lv_obj_set_style_bg_color(find_watch_modal_, lv_color_hex(0x450A0A), 0);
-    lv_obj_set_style_bg_opa(find_watch_modal_, LV_OPA_90, 0);
-    lv_obj_set_style_border_color(find_watch_modal_, lv_color_hex(0xEF4444), 0);
-    lv_obj_set_style_border_width(find_watch_modal_, 3, 0);
-    lv_obj_set_style_pad_all(find_watch_modal_, 10, 0);
+    lv_obj_set_size(find_watch_modal_, width_, height_);
+    lv_obj_set_pos(find_watch_modal_, 0, 0);
     lv_obj_clear_flag(find_watch_modal_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_move_foreground(find_watch_modal_);
+    lv_obj_set_style_bg_color(find_watch_modal_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(find_watch_modal_, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(find_watch_modal_, 0, 0);
 
-    MakeCenteredLabel(find_watch_modal_, "🔔 SMARTPHONE MENCARI ANDA! 🔔", 0, 10, modal_w - 20, 22, FONT_14, lv_color_hex(0xEF4444));
-    MakeCenteredLabel(find_watch_modal_, "Perangkat ini sedang dibunyikan dari HP", 0, 36, modal_w - 20, 18, FONT_12, C_TEXT);
+    lv_obj_t* card = MakePanel(find_watch_modal_, 0, 0, modal_w, modal_h, lv_color_hex(0x270707), lv_color_hex(0xEF4444), 16);
+    lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_set_style_border_width(card, 2, 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
-    MakeButton(find_watch_modal_, "SAYA DI SINI (HENTIKAN)", 
-               (modal_w - 180) / 2, modal_h - 46, 170, 34,
-               lv_color_hex(0xDC2626), lv_color_hex(0xFCA5A5), C_TEXT, FONT_12,
+    // Bell icon
+    lv_obj_t* icon = lv_label_create(card);
+    lv_obj_set_style_text_font(icon, FONT_ICON, 0);
+    lv_label_set_text(icon, MATERIAL_SYMBOLS_NOTIFICATIONS);
+    lv_obj_set_style_text_color(icon, lv_color_hex(0xEF4444), 0);
+    lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 8);
+
+    // Single-line non-overlapping Title
+    MakeCenteredLabel(card, "PENCARIAN SMARTPHONE", 0, 32, modal_w - 20, 20, FONT_12, lv_color_hex(0xEF4444));
+
+    // Subtitle 1
+    MakeCenteredLabel(card, "Perangkat ini sedang dicari dari HP", 0, 56, modal_w - 20, 16, FONT_10, lv_color_white());
+
+    // Subtitle 2
+    MakeCenteredLabel(card, "Tekan tombol untuk mematikan alarm", 0, 74, modal_w - 20, 16, FONT_10, C_MUTED);
+
+    // Clear distinct button
+    int btn_w = modal_w - 36;
+    MakeButton(card, "SAYA DI SINI (HENTIKAN)", 18, modal_h - 48, btn_w, 36,
+               lv_color_hex(0xDC2626), lv_color_hex(0xF87171), lv_color_white(), FONT_12,
                [](lv_event_t* e) {
                    auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                    if (self) {
@@ -10384,5 +10560,119 @@ void NovaDisplay::UpdateNotif() {
     if (current_page_ == PAGE_NOTIF) {
         BuildNotif();
     }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::DismissNotificationDetail() {
+    lvgl_port_lock(0);
+    if (notif_detail_modal_) {
+        lv_obj_del(notif_detail_modal_);
+        notif_detail_modal_ = nullptr;
+    }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::ShowNotificationDetail(int notif_idx) {
+    if (!callbacks_.get_ble_notif_at) return;
+
+    std::string app, title, msg, time;
+    if (!callbacks_.get_ble_notif_at(notif_idx, app, title, msg, time)) {
+        return;
+    }
+
+    lvgl_port_lock(0);
+    DismissNotificationDetail();
+
+    lv_obj_t* top = lv_layer_top();
+    if (!top) {
+        lvgl_port_unlock();
+        return;
+    }
+
+    notif_detail_modal_ = lv_obj_create(top);
+    lv_obj_set_size(notif_detail_modal_, width_, height_);
+    lv_obj_set_pos(notif_detail_modal_, 0, 0);
+    lv_obj_clear_flag(notif_detail_modal_, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(notif_detail_modal_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(notif_detail_modal_, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(notif_detail_modal_, 0, 0);
+
+    bool is_land = (width_ > 240);
+    int card_w = is_land ? 296 : 226;
+    int card_h = is_land ? 224 : 290;
+
+    uint32_t border_color = 0x38BDF8;
+    if (app.find("WhatsApp") != std::string::npos || app.find("WA") != std::string::npos) border_color = 0x10B981;
+    else if (app.find("Telegram") != std::string::npos) border_color = 0x0284C7;
+    else if (app.find("Instagram") != std::string::npos) border_color = 0xEC4899;
+    else if (app.find("YouTube") != std::string::npos) border_color = 0xEF4444;
+
+    lv_obj_t* card = MakePanel(notif_detail_modal_, 0, 0, card_w, card_h, lv_color_hex(0x18181B), lv_color_hex(border_color), 12);
+    lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Header: App name + time + Close button
+    MakeIcon(card, ICON_CHAT, 10, 10, lv_color_hex(border_color), 18);
+    MakeLabel(card, app.empty() ? "Notifikasi" : app.c_str(), 32, 10, card_w - 90, 18, FONT_12, lv_color_hex(border_color));
+    if (!time.empty()) {
+        MakeLabel(card, time.c_str(), card_w - 74, 10, 40, 16, FONT_10, C_MUTED);
+    }
+
+    lv_obj_t* close_btn = lv_btn_create(card);
+    lv_obj_set_size(close_btn, 24, 22);
+    lv_obj_set_pos(close_btn, card_w - 30, 8);
+    StyleButton(close_btn, lv_color_hex(0x27272A), lv_color_hex(0x3F3F46), 4);
+    lv_obj_t* close_lbl = lv_label_create(close_btn);
+    lv_obj_set_style_text_font(close_lbl, FONT_ICON, 0);
+    lv_label_set_text(close_lbl, MATERIAL_SYMBOLS_CLOSE);
+    lv_obj_set_style_text_color(close_lbl, lv_color_hex(0xEF4444), 0);
+    lv_obj_center(close_lbl);
+    lv_obj_add_event_cb(close_btn, [](lv_event_t* e) {
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self) self->DismissNotificationDetail();
+    }, LV_EVENT_CLICKED, this);
+
+    // Divider line
+    lv_obj_t* div = lv_obj_create(card);
+    lv_obj_set_pos(div, 8, 34);
+    lv_obj_set_size(div, card_w - 16, 1);
+    lv_obj_set_style_bg_color(div, lv_color_hex(0x3F3F46), 0);
+    lv_obj_set_style_border_width(div, 0, 0);
+
+    // Sender / Title
+    std::string sender_str = title.empty() ? "(Tanpa Subjek / Pengirim)" : title;
+    MakeLabel(card, "PENGIRIM / JUDUL:", 10, 40, card_w - 20, 14, FONT_10, C_MUTED);
+    lv_obj_t* t_lbl = MakeLabel(card, sender_str.c_str(), 10, 54, card_w - 20, 20, FONT_14, lv_color_white());
+    lv_label_set_long_mode(t_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+
+    // Scrollable Message Body Container
+    int body_y = 80;
+    int body_h = card_h - body_y - 44;
+    lv_obj_t* body_box = lv_obj_create(card);
+    lv_obj_set_pos(body_box, 8, body_y);
+    lv_obj_set_size(body_box, card_w - 16, body_h);
+    lv_obj_set_style_bg_color(body_box, lv_color_hex(0x27272A), 0);
+    lv_obj_set_style_border_color(body_box, lv_color_hex(0x3F3F46), 0);
+    lv_obj_set_style_border_width(body_box, 1, 0);
+    lv_obj_set_style_radius(body_box, 8, 0);
+    lv_obj_set_style_pad_all(body_box, 6, 0);
+    lv_obj_set_scrollbar_mode(body_box, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scroll_dir(body_box, LV_DIR_VER);
+
+    lv_obj_t* msg_lbl = lv_label_create(body_box);
+    lv_obj_set_width(msg_lbl, card_w - 32);
+    lv_obj_set_style_text_font(msg_lbl, FONT_12, 0);
+    lv_obj_set_style_text_color(msg_lbl, lv_color_hex(0xE2E8F0), 0);
+    lv_label_set_long_mode(msg_lbl, LV_LABEL_LONG_WRAP);
+    lv_label_set_text(msg_lbl, msg.empty() ? "(Pesan kosong)" : msg.c_str());
+
+    // Bottom action: Close button
+    MakeButton(card, "TUTUP DETAIL", 10, card_h - 38, card_w - 20, 30,
+               lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), lv_color_white(), FONT_12,
+               [](lv_event_t* e) {
+                   auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                   if (self) self->DismissNotificationDetail();
+               }, this);
+
     lvgl_port_unlock();
 }

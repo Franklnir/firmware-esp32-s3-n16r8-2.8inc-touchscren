@@ -268,6 +268,8 @@ public:
     void DismissNotificationBanner();
     void ShowOtpHighlight(const std::string& service, const std::string& otp_code, const std::string& full_message);
     void DismissOtpHighlight();
+    void ShowNotificationDetail(int notif_idx);
+    void DismissNotificationDetail();
 
     void ShowBtMusicModal();
     void ShowNavModal();
@@ -440,6 +442,7 @@ private:
     lv_obj_t* find_watch_modal_ = nullptr;
     lv_timer_t* notif_banner_timer_ = nullptr;
 
+    lv_obj_t* notif_detail_modal_ = nullptr;
     lv_obj_t* otp_modal_ = nullptr;
     lv_obj_t* otp_countdown_label_ = nullptr;
     lv_timer_t* otp_timer_ = nullptr;

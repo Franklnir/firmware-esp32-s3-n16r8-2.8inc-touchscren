@@ -2613,9 +2613,9 @@ public:
         }
         boot_mode_ = chronchi_settings.GetInt("mode", 0);
         Settings disp_settings("display", true);
-        if (disp_settings.GetInt("def_theme2", 0) == 0) {
+        if (disp_settings.GetInt("def_th2_v5", 0) == 0) {
             disp_settings.SetInt("ui_theme", 2);
-            disp_settings.SetInt("def_theme2", 1);
+            disp_settings.SetInt("def_th2_v5", 1);
         }
         rotation_ = disp_settings.GetInt("rotation", 0);
 

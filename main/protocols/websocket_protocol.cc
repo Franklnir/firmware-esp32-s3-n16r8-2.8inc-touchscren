@@ -5,6 +5,7 @@
 #include "system_info.h"
 
 #include <esp_log.h>
+#include <esp_task_wdt.h>
 #include <arpa/inet.h>
 #include <cJSON.h>
 #include <cstring>
@@ -216,10 +217,20 @@ bool WebsocketProtocol::OpenAudioChannel() {
         return false;
     }
 
-    // Wait for server hello (15s timeout to tolerate weak WiFi/server delay)
-    EventBits_t bits =
-        xEventGroupWaitBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE,
-                            pdFALSE, pdMS_TO_TICKS(15000));
+    // Wait for server hello with watchdog feeding so TWDT never triggers a reboot
+    EventBits_t bits = 0;
+    int waited_ms = 0;
+    while (waited_ms < 10000) {
+        bits = xEventGroupWaitBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE,
+                                   pdFALSE, pdMS_TO_TICKS(100));
+        if (bits & WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT) {
+            break;
+        }
+        waited_ms += 100;
+#if CONFIG_ESP_TASK_WDT_INIT
+        esp_task_wdt_reset();
+#endif
+    }
     if (!(bits & WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT)) {
         ESP_LOGE(TAG, "Failed to receive server hello");
         SetError(Lang::Strings::SERVER_TIMEOUT);

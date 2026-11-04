@@ -1183,9 +1183,9 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
                                 int current_sec = (int)(frames_played * frame_sec);
                                 if (total_duration_sec > 0 && current_sec > total_duration_sec) current_sec = total_duration_sec;
                                 display->UpdateMusicProgress(current_sec, total_duration_sec);
-                                // JANGAN putus stream sebelum EOF! Hanya aktifkan batas darurat jika waktu streaming melampaui 30s dari durasi
-                                if (total_duration_sec > 0 && current_sec >= (total_duration_sec + 30)) {
-                                    ESP_LOGI(TAG, "Duration safeguard reached (%d >= %d + 30s), ending stream", current_sec, total_duration_sec);
+                                // Deteksi durasi lagu selesai: segera akhiri streaming dan aktifkan mode menyimak (listening)!
+                                if (total_duration_sec > 0 && current_sec >= total_duration_sec) {
+                                    ESP_LOGI(TAG, "[DETEKSI] Durasi lagu tercapai (%d >= %d s), mengakhiri pemutaran...", current_sec, total_duration_sec);
                                     need_downshift = false;
                                     break;
                                 }
@@ -1243,7 +1243,7 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
         int wait_ms = 0;
         // Tunggu sampai seluruh buffer lagu habis dimainkan sampai nada terakhir oleh speaker (IsPlaybackIdle).
         // Berikan waktu drain hingga 20 detik (bukan 1.2 detik!) agar beberapa detik terakhir lagu tidak terpotong!
-        while (!app.GetAudioService().IsPlaybackIdle() && wait_ms < 20000 && !abort_requested_.load()) {
+        while (!app.GetAudioService().IsPlaybackIdle() && wait_ms < 3000 && !abort_requested_.load()) {
             vTaskDelay(pdMS_TO_TICKS(50));
             wait_ms += 50;
             int q_size = (int)app.GetAudioService().GetDecodeQueueSize();
