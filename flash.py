@@ -43,11 +43,14 @@ for attempt in range(1, 601):
     port_device, port_desc = candidate_ports[0]
     print(f"\n[DITEMUKAN!] Port {port_device} ({port_desc}) terdeteksi! Memulai flashing...", flush=True)
 
+    idf_python = r"C:\Users\frank\.espressif\python_env\idf5.5_py3.11_env\Scripts\python.exe"
+    py_exec = idf_python if os.path.exists(idf_python) else sys.executable
+
     # Flash attempt with baud 460800 first, fallback to 115200
     for baud in ["460800", "230400", "115200"]:
         print(f"Mencoba flashing pada port {port_device} (Baud {baud})...", flush=True)
         cmd = [
-            sys.executable, "-m", "esptool",
+            py_exec, "-m", "esptool",
             "--chip", "esp32s3",
             "-p", port_device,
             "-b", baud,
