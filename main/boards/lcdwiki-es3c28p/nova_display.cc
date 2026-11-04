@@ -485,11 +485,56 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
     int bt_w = 22;
     int bt_x = vol_x - bt_w - 4;
 
-    title_w = bt_x - title_x - 2;
-    if (title_w < 30) title_w = 30;
+    if (current_page_ == PAGE_HOME) {
+        // Homescreen: omits title text so status bar icons have clean, luxurious spacing without overlap
+        int notif_w = 32;
+        int notif_x = bt_x - notif_w - 4;
 
-    lv_obj_t* title_lbl = MakeLabel(bar, title, title_x, 7, title_w, 20, FONT_14, C_TEXT, LV_TEXT_ALIGN_LEFT);
-    lv_label_set_long_mode(title_lbl, LV_LABEL_LONG_DOT);
+        int notif_cnt = callbacks_.get_ble_notif_count ? callbacks_.get_ble_notif_count() : 0;
+        top_notif_btn_ = lv_btn_create(bar);
+        lv_obj_set_pos(top_notif_btn_, notif_x, 4);
+        lv_obj_set_size(top_notif_btn_, notif_w, 26);
+        StyleButton(top_notif_btn_, C_BG, C_BG, 6);
+        lv_obj_set_style_border_width(top_notif_btn_, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(top_notif_btn_, 0, LV_PART_MAIN);
+
+        top_notif_icon_ = lv_label_create(top_notif_btn_);
+        lv_obj_clear_flag(top_notif_icon_, LV_OBJ_FLAG_CLICKABLE);
+        lv_label_set_text(top_notif_icon_, MATERIAL_SYMBOLS_MAIL);
+        lv_obj_set_style_text_font(top_notif_icon_, FONT_ICON, LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
+        lv_obj_set_pos(top_notif_icon_, 1, 3);
+
+        top_notif_label_ = lv_label_create(top_notif_btn_);
+        lv_obj_clear_flag(top_notif_label_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_style_text_font(top_notif_label_, FONT_10, LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_notif_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+        lv_obj_set_pos(top_notif_label_, 18, 5);
+
+        if (notif_cnt > 0) {
+            char n_txt[16];
+            snprintf(n_txt, sizeof(n_txt), "%d", notif_cnt);
+            lv_label_set_text(top_notif_label_, n_txt);
+            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
+            lv_obj_clear_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_label_set_text(top_notif_label_, "");
+            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0x64748B), LV_PART_MAIN);
+            lv_obj_add_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+
+        lv_obj_add_event_cb(top_notif_btn_, [](lv_event_t* e) {
+            if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->NavigateTo(PAGE_NOTIF);
+        }, LV_EVENT_CLICKED, this);
+    } else {
+        // Subpages: Show page title with ample room
+        title_w = bt_x - title_x - 2;
+        if (title_w < 30) title_w = 30;
+        lv_obj_t* title_lbl = MakeLabel(bar, title, title_x, 7, title_w, 20, FONT_14, C_TEXT, LV_TEXT_ALIGN_LEFT);
+        lv_label_set_long_mode(title_lbl, LV_LABEL_LONG_DOT);
+    }
 
     // Right Status Bar Icons: Bluetooth -> Volume -> Wi-Fi -> Battery
     // 1. Bluetooth BLE (Tap -> info dialog)
@@ -653,6 +698,8 @@ void NovaDisplay::CloseRecentAppsModal() {
 }
 
 void NovaDisplay::CloseAllModals() {
+    DismissOtpHighlight();
+    DismissNotificationBanner();
     if (wifi_modal_) {
         lv_obj_del(wifi_modal_);
         wifi_modal_ = nullptr;
@@ -871,6 +918,10 @@ lv_obj_t* NovaDisplay::NewRoot() {
     CloseAllModals();
 
     top_wifi_icon_ = nullptr;
+    top_bluetooth_icon_ = nullptr;
+    top_notif_btn_ = nullptr;
+    top_notif_icon_ = nullptr;
+    top_notif_label_ = nullptr;
     top_mute_icon_ = nullptr;
     top_battery_icon_ = nullptr;
     top_battery_label_ = nullptr;
@@ -4923,6 +4974,22 @@ void NovaDisplay::UpdateLiveLabels() {
         lv_obj_set_style_text_color(top_bluetooth_icon_, ble_conn ? lv_color_hex(0x38BDF8) : lv_color_hex(0x64748B), LV_PART_MAIN);
     }
 
+    if (top_notif_btn_ && top_notif_icon_ && top_notif_label_) {
+        int n_cnt = callbacks_.get_ble_notif_count ? callbacks_.get_ble_notif_count() : 0;
+        if (n_cnt > 0) {
+            char n_buf[16];
+            snprintf(n_buf, sizeof(n_buf), "%d", n_cnt);
+            lv_label_set_text(top_notif_label_, n_buf);
+            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
+            lv_obj_clear_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_label_set_text(top_notif_label_, "");
+            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0x64748B), LV_PART_MAIN);
+            lv_obj_add_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_clear_flag(top_notif_btn_, LV_OBJ_FLAG_HIDDEN);
+    }
+
     if (top_mute_icon_) {
         lv_label_set_text(top_mute_icon_, muted_ ? MATERIAL_SYMBOLS_VOLUME_OFF : MATERIAL_SYMBOLS_VOLUME_UP);
         lv_obj_set_style_text_color(top_mute_icon_, muted_ ? C_MUTED : lv_color_hex(0x06B6D4), LV_PART_MAIN);
@@ -5201,6 +5268,9 @@ void NovaDisplay::ShowAudioPlayerModal(const std::string& title, const std::stri
         if (s_domain.empty()) {
             Settings sys_settings("system", false);
             s_domain = sys_settings.GetString("server_domain");
+        }
+        if (s_domain.empty()) {
+            s_domain = "xiaozhiscig.biz.id";
         }
         if (!s_domain.empty()) {
             snprintf(sub_str, sizeof(sub_str), "%s • ES8311 DAC", s_domain.c_str());
@@ -6041,7 +6111,7 @@ void NovaDisplay::FlappyTick() {
             lv_obj_clear_flag(flappy_card_, LV_OBJ_FLAG_HIDDEN);
             if (flappy_card_title_) lv_label_set_text(flappy_card_title_, "GAME OVER!");
             if (flappy_card_sub_) {
-                char buf[48];
+                char buf[96];
                 snprintf(buf, sizeof(buf), "Skor: %d  |  Rekor: %d", flappy_score_, flappy_best_);
                 lv_label_set_text(flappy_card_sub_, buf);
             }
@@ -8898,7 +8968,164 @@ void NovaDisplay::BuildMonitor() {
 // CHRONOS INTEGRATION & NATIVE NOVA OS BLUETOOTH FEATURES
 // ============================================================================
 
+static bool CheckAndExtractOtp(const std::string& app, const std::string& title, const std::string& message,
+                               std::string& out_service, std::string& out_otp_code) {
+    if (message.empty() && title.empty()) return false;
+
+    std::string combined = app + " " + title + " " + message;
+    std::string lower = combined;
+    for (char& c : lower) {
+        c = (char)tolower((unsigned char)c);
+    }
+
+    bool has_otp_kw = false;
+    static const char* const kKeywords[] = {
+        "otp", "token", "kode verifikasi", "verification code", "verifikasi",
+        "kode masuk", "login code", "kode konfirmasi", "security code",
+        "kode keamanan", "passcode", "kode rahasia", "one time password", "autentikasi"
+    };
+    for (const char* kw : kKeywords) {
+        if (lower.find(kw) != std::string::npos) {
+            has_otp_kw = true;
+            break;
+        }
+    }
+    if (!has_otp_kw) return false;
+
+    // Service identification
+    static const struct { const char* key; const char* name; } kServices[] = {
+        {"bca", "BCA BANK"},
+        {"mandiri", "BANK MANDIRI"},
+        {"bri", "BANK BRI"},
+        {"bni", "BANK BNI"},
+        {"bsi", "BANK BSI"},
+        {"cimb", "CIMB NIAGA"},
+        {"permata", "PERMATA BANK"},
+        {"jenius", "JENIUS"},
+        {"jago", "BANK JAGO"},
+        {"dana", "DANA"},
+        {"ovo", "OVO"},
+        {"gopay", "GOPAY"},
+        {"gojek", "GOJEK"},
+        {"grab", "GRAB"},
+        {"shopee", "SHOPEE"},
+        {"tokopedia", "TOKOPEDIA"},
+        {"blibli", "BLIBLI"},
+        {"lazada", "LAZADA"},
+        {"google", "GOOGLE"},
+        {"whatsapp", "WHATSAPP"},
+        {"telegram", "TELEGRAM"},
+        {"tiktok", "TIKTOK"},
+        {"facebook", "FACEBOOK"},
+        {"instagram", "INSTAGRAM"},
+        {"microsoft", "MICROSOFT"},
+        {"apple", "APPLE ID"}
+    };
+
+    out_service.clear();
+    for (const auto& s : kServices) {
+        if (lower.find(s.key) != std::string::npos) {
+            out_service = s.name;
+            break;
+        }
+    }
+    if (out_service.empty()) {
+        if (!title.empty() && title.length() <= 20) {
+            out_service = title;
+        } else if (!app.empty()) {
+            out_service = app;
+        } else {
+            out_service = "SMS BANKING";
+        }
+    }
+
+    // 1. Check Google format: G-123456
+    size_t g_pos = message.find("G-");
+    if (g_pos != std::string::npos && g_pos + 8 <= message.length()) {
+        bool all_num = true;
+        for (int i = 0; i < 6; ++i) {
+            if (!isdigit((unsigned char)message[g_pos + 2 + i])) {
+                all_num = false;
+                break;
+            }
+        }
+        if (all_num) {
+            out_otp_code = message.substr(g_pos, 8);
+            return true;
+        }
+    }
+
+    // 2. Scan after prefixes
+    static const char* const kPrefixes[] = {
+        "otp:", "otp :", "otp adalah", "otp anda", "kode:", "kode :", "kode anda",
+        "code:", "code :", "code is", "token:", "token :", "adalah", "is"
+    };
+    for (const char* pfx : kPrefixes) {
+        size_t idx = lower.find(pfx);
+        if (idx != std::string::npos) {
+            size_t s = idx + strlen(pfx);
+            while (s < message.length() && (message[s] == ' ' || message[s] == ':' || message[s] == '=')) {
+                s++;
+            }
+            std::string cand;
+            while (s < message.length() && (isdigit((unsigned char)message[s]) || message[s] == '-')) {
+                cand += message[s++];
+            }
+            int digits = 0;
+            for (char c : cand) if (isdigit((unsigned char)c)) digits++;
+            if (digits >= 4 && digits <= 8) {
+                out_otp_code = cand;
+                return true;
+            }
+        }
+    }
+
+    // 3. Scan standalone candidates
+    for (size_t i = 0; i < message.length(); ) {
+        if (isdigit((unsigned char)message[i])) {
+            size_t start = i;
+            while (i < message.length() && (isdigit((unsigned char)message[i]) || message[i] == '-')) {
+                i++;
+            }
+            std::string cand = message.substr(start, i - start);
+            int digits = 0;
+            for (char c : cand) if (isdigit((unsigned char)c)) digits++;
+
+            if (digits >= 4 && digits <= 8) {
+                bool is_currency = false;
+                if (start >= 2) {
+                    size_t pre_start = (start >= 5) ? start - 5 : 0;
+                    std::string pre = message.substr(pre_start, start - pre_start);
+                    for (char& c : pre) c = (char)tolower((unsigned char)c);
+                    if (pre.find("rp") != std::string::npos || pre.find("idr") != std::string::npos) {
+                        is_currency = true;
+                    }
+                }
+                if (digits == 4 && (cand == "2024" || cand == "2025" || cand == "2026" || cand == "2027")) {
+                    is_currency = true;
+                }
+                if (!is_currency) {
+                    out_otp_code = cand;
+                    return true;
+                }
+            }
+        } else {
+            i++;
+        }
+    }
+
+    return false;
+}
+
 void NovaDisplay::ShowNotificationBanner(const std::string& app, const std::string& title, const std::string& message) {
+    // 1. Check if this is an OTP / SMS Banking token
+    std::string otp_service, otp_code;
+    if (CheckAndExtractOtp(app, title, message, otp_service, otp_code)) {
+        ESP_LOGI(TAG, "Smart OTP Notification detected: service='%s', code='%s'",
+                 otp_service.c_str(), otp_code.c_str());
+        ShowOtpHighlight(otp_service, otp_code, message);
+        return;
+    }
     lvgl_port_lock(0);
     lv_obj_t* top = lv_layer_top();
     if (!top) {
@@ -8989,6 +9216,188 @@ void NovaDisplay::DismissNotificationBanner() {
         lv_obj_del(notif_banner_);
         notif_banner_ = nullptr;
     }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::DismissOtpHighlight() {
+    lvgl_port_lock(0);
+    if (otp_timer_) {
+        lv_timer_del(otp_timer_);
+        otp_timer_ = nullptr;
+    }
+    if (otp_modal_) {
+        lv_obj_del(otp_modal_);
+        otp_modal_ = nullptr;
+        otp_countdown_label_ = nullptr;
+    }
+    lvgl_port_unlock();
+}
+
+void NovaDisplay::ShowOtpHighlight(const std::string& service, const std::string& otp_code, const std::string& full_message) {
+    lvgl_port_lock(0);
+    if (notif_banner_) {
+        if (notif_banner_timer_) {
+            lv_timer_del(notif_banner_timer_);
+            notif_banner_timer_ = nullptr;
+        }
+        lv_obj_del(notif_banner_);
+        notif_banner_ = nullptr;
+    }
+    if (otp_timer_) {
+        lv_timer_del(otp_timer_);
+        otp_timer_ = nullptr;
+    }
+    if (otp_modal_) {
+        lv_obj_del(otp_modal_);
+        otp_modal_ = nullptr;
+        otp_countdown_label_ = nullptr;
+    }
+
+    lv_obj_t* top = lv_layer_top();
+    if (!top) {
+        lvgl_port_unlock();
+        return;
+    }
+
+    bool is_land = (width_ > 240);
+    int modal_w = is_land ? 296 : 228;
+    int modal_h = is_land ? 190 : 250;
+    int modal_x = (width_ - modal_w) / 2;
+    int modal_y = (height_ - modal_h) / 2;
+
+    otp_modal_ = lv_obj_create(top);
+    lv_obj_set_pos(otp_modal_, modal_x, modal_y);
+    lv_obj_set_size(otp_modal_, modal_w, modal_h);
+    lv_obj_set_style_radius(otp_modal_, 14, 0);
+    lv_obj_set_style_bg_color(otp_modal_, lv_color_hex(0x0A0F1D), 0);
+    lv_obj_set_style_bg_opa(otp_modal_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(otp_modal_, lv_color_hex(0xF59E0B), 0); // Amber gold glowing border
+    lv_obj_set_style_border_width(otp_modal_, 2, 0);
+    lv_obj_set_style_pad_all(otp_modal_, 8, 0);
+    lv_obj_clear_flag(otp_modal_, LV_OBJ_FLAG_SCROLLABLE);
+
+    // 1. Header: Lock Icon + Title + Close Button
+    lv_obj_t* key_icon = lv_label_create(otp_modal_);
+    lv_label_set_text(key_icon, MATERIAL_SYMBOLS_LOCK);
+    lv_obj_set_style_text_font(key_icon, FONT_ICON, 0);
+    lv_obj_set_style_text_color(key_icon, lv_color_hex(0xF59E0B), 0);
+    lv_obj_set_pos(key_icon, 4, 4);
+
+    lv_obj_t* title_lbl = lv_label_create(otp_modal_);
+    lv_label_set_text(title_lbl, "KODE OTP / TOKEN BANK");
+    lv_obj_set_style_text_font(title_lbl, FONT_12, 0);
+    lv_obj_set_style_text_color(title_lbl, lv_color_hex(0xF59E0B), 0);
+    lv_obj_set_pos(title_lbl, 26, 6);
+
+    // Close button [X]
+    lv_obj_t* close_btn = lv_btn_create(otp_modal_);
+    lv_obj_set_pos(close_btn, modal_w - 40, 2);
+    lv_obj_set_size(close_btn, 24, 24);
+    StyleButton(close_btn, lv_color_hex(0x1F2937), lv_color_hex(0x374151), 6);
+    lv_obj_set_style_pad_all(close_btn, 0, 0);
+    lv_obj_t* x_lbl = lv_label_create(close_btn);
+    lv_label_set_text(x_lbl, MATERIAL_SYMBOLS_CLOSE);
+    lv_obj_set_style_text_font(x_lbl, FONT_ICON, 0);
+    lv_obj_set_style_text_color(x_lbl, lv_color_hex(0x94A3B8), 0);
+    lv_obj_center(x_lbl);
+    lv_obj_add_event_cb(close_btn, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self) self->DismissOtpHighlight();
+    }, LV_EVENT_CLICKED, this);
+
+    // 2. Service Badge Pill
+    lv_obj_t* s_badge = lv_obj_create(otp_modal_);
+    lv_obj_set_pos(s_badge, 6, 28);
+    lv_obj_set_size(s_badge, modal_w - 28, 22);
+    lv_obj_set_style_radius(s_badge, 6, 0);
+    lv_obj_set_style_bg_color(s_badge, lv_color_hex(0x111827), 0);
+    lv_obj_set_style_border_color(s_badge, lv_color_hex(0x1F2937), 0);
+    lv_obj_set_style_border_width(s_badge, 1, 0);
+    lv_obj_set_style_pad_all(s_badge, 2, 0);
+    lv_obj_clear_flag(s_badge, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* s_lbl = lv_label_create(s_badge);
+    std::string s_text = "LAYANAN: " + service;
+    lv_label_set_text(s_lbl, s_text.c_str());
+    lv_obj_set_style_text_font(s_lbl, FONT_10, 0);
+    lv_obj_set_style_text_color(s_lbl, lv_color_hex(0x38BDF8), 0);
+    lv_obj_center(s_lbl);
+
+    // 3. Central Huge OTP Box (Hero Element!)
+    int box_y = 54;
+    int box_h = is_land ? 58 : 68;
+    lv_obj_t* otp_box = lv_obj_create(otp_modal_);
+    lv_obj_set_pos(otp_box, 6, box_y);
+    lv_obj_set_size(otp_box, modal_w - 28, box_h);
+    lv_obj_set_style_radius(otp_box, 10, 0);
+    lv_obj_set_style_bg_color(otp_box, lv_color_hex(0x030712), 0);
+    lv_obj_set_style_border_color(otp_box, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_border_width(otp_box, 2, 0);
+    lv_obj_set_style_pad_all(otp_box, 4, 0);
+    lv_obj_clear_flag(otp_box, LV_OBJ_FLAG_SCROLLABLE);
+
+    std::string spaced_code = "";
+    for (size_t i = 0; i < otp_code.length(); ++i) {
+        spaced_code += otp_code[i];
+        if (i + 1 < otp_code.length() && otp_code[i] != '-' && otp_code[i+1] != '-') {
+            spaced_code += " ";
+        }
+    }
+
+    lv_obj_t* code_lbl = lv_label_create(otp_box);
+    lv_label_set_text(code_lbl, spaced_code.c_str());
+    lv_obj_set_style_text_font(code_lbl, FONT_36, 0);
+    lv_obj_set_style_text_color(code_lbl, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(code_lbl);
+
+    // 4. Message context preview (1 line)
+    int msg_y = box_y + box_h + 4;
+    lv_obj_t* msg_lbl = lv_label_create(otp_modal_);
+    lv_label_set_text(msg_lbl, full_message.empty() ? "(Rahasiakan kode OTP Anda)" : full_message.c_str());
+    lv_obj_set_style_text_font(msg_lbl, FONT_10, 0);
+    lv_obj_set_style_text_color(msg_lbl, lv_color_hex(0x94A3B8), 0);
+    lv_obj_set_pos(msg_lbl, 8, msg_y);
+    lv_obj_set_width(msg_lbl, modal_w - 32);
+    lv_label_set_long_mode(msg_lbl, LV_LABEL_LONG_DOT);
+
+    // 5. Countdown & Action footer (30 seconds)
+    int foot_y = modal_h - 28;
+    otp_countdown_label_ = lv_label_create(otp_modal_);
+    otp_remaining_sec_ = 30;
+    char cd_buf[96];
+    snprintf(cd_buf, sizeof(cd_buf), "Menutup otomatis dalam %d dtk (Ketuk utk tutup)", otp_remaining_sec_);
+    lv_label_set_text(otp_countdown_label_, cd_buf);
+    lv_obj_set_style_text_font(otp_countdown_label_, FONT_10, 0);
+    lv_obj_set_style_text_color(otp_countdown_label_, lv_color_hex(0xFCD34D), 0);
+    lv_obj_set_pos(otp_countdown_label_, 8, foot_y);
+    lv_obj_set_width(otp_countdown_label_, modal_w - 32);
+    lv_obj_set_style_text_align(otp_countdown_label_, LV_TEXT_ALIGN_CENTER, 0);
+
+    // Clicking anywhere on modal closes it
+    lv_obj_add_flag(otp_modal_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(otp_modal_, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self) self->DismissOtpHighlight();
+    }, LV_EVENT_CLICKED, this);
+
+    // Timer: runs every 1000ms for 30 seconds
+    otp_timer_ = lv_timer_create([](lv_timer_t* t) {
+        auto* self = static_cast<NovaDisplay*>(lv_timer_get_user_data(t));
+        if (!self) return;
+        self->otp_remaining_sec_--;
+        if (self->otp_remaining_sec_ <= 0) {
+            self->DismissOtpHighlight();
+        } else if (self->otp_countdown_label_) {
+            char buf[96];
+            snprintf(buf, sizeof(buf), "Menutup otomatis dalam %d dtk (Ketuk utk tutup)", self->otp_remaining_sec_);
+            lv_label_set_text(self->otp_countdown_label_, buf);
+        }
+    }, 1000, this);
+    lv_timer_set_repeat_count(otp_timer_, 31);
+
+    lv_obj_move_foreground(otp_modal_);
     lvgl_port_unlock();
 }
 
@@ -9291,7 +9700,7 @@ void NovaDisplay::BuildNav() {
 
         // Jarak Belokan Berikutnya
         std::string dist_str = dist.empty() ? "-- m" : dist;
-        lv_obj_t* dist_lbl = MakeLabel(card, dist_str.c_str(), 70, 6, content_w - 78, 30, FONT_28, lv_color_hex(0x38BDF8));
+        MakeLabel(card, dist_str.c_str(), 70, 6, content_w - 78, 30, FONT_28, lv_color_hex(0x38BDF8));
 
         // Status GPS Aktif
         std::string status_txt = active ? "● Rute GPS Aktif" : "Menunggu Rute...";
@@ -9537,23 +9946,23 @@ void NovaDisplay::BuildNotif() {
         lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
-        // Header action: Total count badge + "Hapus Semua" button
+        // Header action: Total count badge + "Hapus Semua" compact button
         lv_obj_t* hbar = lv_obj_create(list);
         lv_obj_set_pos(hbar, 0, 0);
-        lv_obj_set_size(hbar, content_w, 32);
+        lv_obj_set_size(hbar, content_w, 28);
         lv_obj_set_style_bg_color(hbar, lv_color_hex(0x0F172A), 0);
         lv_obj_set_style_border_color(hbar, C_BORDER, 0);
         lv_obj_set_style_border_width(hbar, 1, 0);
-        lv_obj_set_style_radius(hbar, 8, 0);
-        lv_obj_set_style_pad_all(hbar, 4, 0);
+        lv_obj_set_style_radius(hbar, 6, 0);
+        lv_obj_set_style_pad_all(hbar, 2, 0);
         lv_obj_clear_flag(hbar, LV_OBJ_FLAG_SCROLLABLE);
 
         char cnt_str[32];
         snprintf(cnt_str, sizeof(cnt_str), "%d Notifikasi HP", notif_count);
-        MakeLabel(hbar, cnt_str, 8, 6, content_w - 110, 18, FONT_12, C_CYAN);
+        MakeLabel(hbar, cnt_str, 8, 4, content_w - 72, 18, FONT_12, C_CYAN);
 
-        MakeButton(hbar, "🗑 HAPUS", content_w - 92, 2, 86, 26, 
-                   lv_color_hex(0x3B1219), lv_color_hex(0xEF4444), lv_color_hex(0xEF4444), FONT_10,
+        MakeButton(hbar, "HAPUS", content_w - 60, 3, 54, 20,
+                   lv_color_hex(0x2A1215), lv_color_hex(0xEF4444), lv_color_hex(0xFCA5A5), FONT_10,
                    [](lv_event_t* e) {
                        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                        if (self && self->callbacks_.clear_ble_notifs) {
@@ -9957,6 +10366,21 @@ void NovaDisplay::UpdatePhoneStatus(int bat, bool chg, const std::string& net) {
 
 void NovaDisplay::UpdateNotif() {
     lvgl_port_lock(0);
+    if (top_notif_btn_ && top_notif_icon_ && top_notif_label_) {
+        int n_cnt = callbacks_.get_ble_notif_count ? callbacks_.get_ble_notif_count() : 0;
+        if (n_cnt > 0) {
+            char n_buf[16];
+            snprintf(n_buf, sizeof(n_buf), "%d", n_cnt);
+            lv_label_set_text(top_notif_label_, n_buf);
+            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
+            lv_obj_clear_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_label_set_text(top_notif_label_, "");
+            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0x64748B), LV_PART_MAIN);
+            lv_obj_add_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_clear_flag(top_notif_btn_, LV_OBJ_FLAG_HIDDEN);
+    }
     if (current_page_ == PAGE_NOTIF) {
         BuildNotif();
     }

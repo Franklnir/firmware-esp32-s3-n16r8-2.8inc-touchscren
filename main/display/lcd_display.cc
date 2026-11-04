@@ -305,9 +305,9 @@ LcdDisplay::LcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_handle_
     if (chat_font_level_ < 0 || chat_font_level_ > 3) {
         chat_font_level_ = 1;
     }
-    ui_theme_id_ = settings.GetInt("ui_theme", 1);
+    ui_theme_id_ = settings.GetInt("ui_theme", 2);
     if (ui_theme_id_ < 1 || ui_theme_id_ > 2) {
-        ui_theme_id_ = 1;
+        ui_theme_id_ = 2;
     }
 
     const auto* synced = GetCurrentSyncedTheme();

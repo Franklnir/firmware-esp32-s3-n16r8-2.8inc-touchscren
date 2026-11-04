@@ -333,7 +333,7 @@ public:
         Settings b_set("battery", true);
         saved_soc_ = b_set.GetInt("last_soc", -1);
         saved_mv_ = b_set.GetInt("last_mv", -1);
-        int cali_x1000 = b_set.GetInt("cali_factor_x1000", 1000);
+        int cali_x1000 = b_set.GetInt("cali_x1000", 1000);
         if (cali_x1000 >= 500 && cali_x1000 <= 2000) {
             cali_factor_ = cali_x1000 / 1000.0f;
         }
@@ -593,7 +593,7 @@ public:
         if (factor >= 0.5f && factor <= 2.0f) {
             cali_factor_ = factor;
             Settings b_set("battery", true);
-            b_set.SetInt("cali_factor_x1000", (int)(factor * 1000.0f + 0.5f));
+            b_set.SetInt("cali_x1000", (int)(factor * 1000.0f + 0.5f));
             ESP_LOGI("LCDWikiBattery", "Calibration factor updated: %.4f", factor);
         }
     }
@@ -747,6 +747,7 @@ private:
     bool chronchi_mode_ = false;
     NovaDisplay* nova_display_ = nullptr;
     bool nova_mode_ = false;
+    int boot_mode_ = 0;
     SdCardManager sd_card_manager_;
 
 #if CONFIG_BT_ENABLED
@@ -1347,9 +1348,7 @@ private:
         if (chronchi_mode_ || nova_mode_) {
             return true;
         }
-        Settings settings("chronchi", true);
-        int mode = settings.GetInt("mode", 0); // Default: Mode 0 (XiaoZhi AI Assistant)
-        return (mode == 1 || mode == 2);
+        return (boot_mode_ == 1 || boot_mode_ == 2);
     }
 
     virtual void StartNetwork() override {
@@ -2038,9 +2037,7 @@ private:
     }
 
     virtual void StartChronchi() override {
-        Settings settings("chronchi", true);
-        int mode = settings.GetInt("mode", 2);
-        if (mode == 2) {
+        if (boot_mode_ == 2) {
             StartNovaOS();
             return;
         }
@@ -2058,6 +2055,7 @@ private:
     }
 
     virtual void SwitchToMode(int target_mode) override {
+        boot_mode_ = target_mode;
         const char* name = (target_mode == 1) ? "Chronchi" : (target_mode == 2) ? "Nova OS" : "XiaoZhi";
         ESP_LOGI(TAG, "Switching mode to %s (mode=%d)...", name, target_mode);
         Settings settings("chronchi", true);
@@ -2613,9 +2611,11 @@ public:
             chronchi_settings.SetInt("mode", 0);
             chronchi_settings.SetInt("boot_to_xz", 1);
         }
+        boot_mode_ = chronchi_settings.GetInt("mode", 0);
         Settings disp_settings("display", true);
-        if (disp_settings.GetInt("ui_theme", 0) == 0) {
-            disp_settings.SetInt("ui_theme", 1);
+        if (disp_settings.GetInt("def_theme2", 0) == 0) {
+            disp_settings.SetInt("ui_theme", 2);
+            disp_settings.SetInt("def_theme2", 1);
         }
         rotation_ = disp_settings.GetInt("rotation", 0);
 

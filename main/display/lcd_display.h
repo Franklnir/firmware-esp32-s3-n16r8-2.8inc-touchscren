@@ -47,7 +47,7 @@ protected:
     int music_anim_phase_ = 0;
     bool music_visualizer_active_ = false;
 
-    int ui_theme_id_ = 1;
+    int ui_theme_id_ = 2;
     bool is_st7789_ = false;
     lv_obj_t* avatar_circle_ = nullptr;
 

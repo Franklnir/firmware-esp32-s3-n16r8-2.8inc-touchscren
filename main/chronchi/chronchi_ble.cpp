@@ -266,7 +266,7 @@ void ChronchiBle::loop() {
 }
 
 bool ChronchiBle::isConnected() const {
-    return _connected && (_chronos_subscribed || _chronchi_subscribed);
+    return _connected;
 }
 
 bool ChronchiBle::isSubscribed() const {
@@ -1775,7 +1775,21 @@ void ChronchiBle::_onGattsEvent(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
             _advertising = false;
             _conn_id = param->connect.conn_id;
             memcpy(_remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
-            ESP_LOGI(TAG, "Phone connected, conn_id=%d", _conn_id);
+            ESP_LOGI(TAG, "Phone connected, conn_id=%d. Scheduling auto-handshake...", _conn_id);
+
+            // On reconnect, phones often use cached CCCD and don't write CCCD again.
+            // Mark as subscribed and schedule automatic handshake immediately for instant pairing/sync!
+            _chronos_subscribed = true;
+            _handshake_tick = xTaskGetTickCount() + pdMS_TO_TICKS(1000);
+
+            // Fast connection interval for instant notifications and responsive smartwatch feel
+            esp_ble_conn_update_params_t conn_params = {};
+            memcpy(conn_params.bda, _remote_bda, sizeof(esp_bd_addr_t));
+            conn_params.min_int = 0x10; // 20ms
+            conn_params.max_int = 0x20; // 40ms
+            conn_params.latency = 0;
+            conn_params.timeout = 400; // 4000ms
+            esp_ble_gap_update_conn_params(&conn_params);
 
             if (_connCb) _connCb(true);
             break;

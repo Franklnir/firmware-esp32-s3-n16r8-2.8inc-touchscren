@@ -266,6 +266,8 @@ public:
 
     void ShowNotificationBanner(const std::string& app, const std::string& title, const std::string& message);
     void DismissNotificationBanner();
+    void ShowOtpHighlight(const std::string& service, const std::string& otp_code, const std::string& full_message);
+    void DismissOtpHighlight();
 
     void ShowBtMusicModal();
     void ShowNavModal();
@@ -343,6 +345,9 @@ private:
 
     // Top status bar handles (identik XiaoZhi)
     lv_obj_t* top_bluetooth_icon_ = nullptr;
+    lv_obj_t* top_notif_btn_ = nullptr;
+    lv_obj_t* top_notif_icon_ = nullptr;
+    lv_obj_t* top_notif_label_ = nullptr;
     lv_obj_t* top_wifi_icon_ = nullptr;
     lv_obj_t* top_mute_icon_ = nullptr;
     lv_obj_t* top_battery_icon_ = nullptr;
@@ -434,6 +439,11 @@ private:
     lv_obj_t* call_alert_modal_ = nullptr;
     lv_obj_t* find_watch_modal_ = nullptr;
     lv_timer_t* notif_banner_timer_ = nullptr;
+
+    lv_obj_t* otp_modal_ = nullptr;
+    lv_obj_t* otp_countdown_label_ = nullptr;
+    lv_timer_t* otp_timer_ = nullptr;
+    int otp_remaining_sec_ = 30;
 
     lv_obj_t* bt_music_modal_ = nullptr;
     lv_obj_t* bt_music_title_ = nullptr;
