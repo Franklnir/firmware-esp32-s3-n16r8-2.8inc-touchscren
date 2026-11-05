@@ -2619,6 +2619,13 @@ public:
         }
         rotation_ = disp_settings.GetInt("rotation", 0);
 
+        // Ensure default Wi-Fi TX Power is 20 dBm (Maximum range)
+        Settings wifi_settings("wifi", true);
+        if (wifi_settings.GetInt("def_tx20_v1", 0) == 0) {
+            wifi_settings.SetInt("max_tx_power", 20);
+            wifi_settings.SetInt("def_tx20_v1", 1);
+        }
+
         InitializeI2c();
         InitializeBatteryMonitor();
         InitializeLed();
