@@ -18,6 +18,7 @@
 #include <esp_mac.h>
 #include <esp_sntp.h>
 #include <esp_netif.h>
+#include <esp_wifi.h>
 
 #include <driver/gpio.h>
 #include <driver/i2c_master.h>
@@ -1368,6 +1369,8 @@ private:
     virtual void OnNetworkEvent(NetworkEvent event, const std::string& data = "") override {
         WifiBoard::OnNetworkEvent(event, data);
         if (event == NetworkEvent::Connected) {
+            // Ensure maximum Wi-Fi TX Power (20 dBm = 80 in 0.25 dBm units)
+            esp_wifi_set_max_tx_power(80);
             // Inisialisasi Zona Waktu Sistem (Default: WIB UTC+7 / Indonesia Bagian Barat)
             Settings sys_settings("system", true);
             int tz_idx = sys_settings.GetInt("tz_idx", 0);
