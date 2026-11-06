@@ -243,6 +243,36 @@ std::string NovaDisplay::GetCurrentThemeName() const {
     return cur ? cur->display_name : "Stabilo Hijau Neon";
 }
 
+bool NovaDisplay::IsNotifSoundEnabled() const {
+    Settings audio_s("audio", true);
+    return audio_s.GetInt("notif_snd_en", 1) != 0;
+}
+
+void NovaDisplay::SetNotifSoundEnabled(bool en) {
+    Settings audio_s("audio", true);
+    audio_s.SetInt("notif_snd_en", en ? 1 : 0);
+}
+
+int NovaDisplay::GetNotifSoundIndex() const {
+    Settings audio_s("audio", true);
+    return audio_s.GetInt("notif_snd_idx", 0);
+}
+
+void NovaDisplay::SetNotifSoundIndex(int idx) {
+    if (idx < 0) idx = 0;
+    if (idx > 5) idx = 5;
+    Settings audio_s("audio", true);
+    audio_s.SetInt("notif_snd_idx", idx);
+}
+
+void NovaDisplay::PreviewNotifSound(int idx) {
+    if (idx < 0) idx = 0;
+    if (idx > 5) idx = 5;
+    if (callbacks_.play_sound) {
+        callbacks_.play_sound(201 + idx);
+    }
+}
+
 NovaDisplay::~NovaDisplay() {
     CloseDownloadModal(false);
     if (nav_icon_buf_) {
@@ -1020,6 +1050,9 @@ void NovaDisplay::NavigateTo(Page next) {
         display_pal_scroll_x_ = 0;
         display_bg_scroll_x_ = 0;
         display_tc_scroll_x_ = 0;
+    }
+    if (next == PAGE_AUDIO && current_page_ != PAGE_AUDIO) {
+        audio_scroll_y_ = 0;
     }
     if (current_page_ != PAGE_SPLASH) {
         if (history_depth_ < HISTORY_CAPACITY) {
@@ -3630,20 +3663,46 @@ void NovaDisplay::BuildAudio() {
     if (vol < 0) vol = 0;
     if (vol > 100) vol = 100;
 
+    bool snd_enabled = IsNotifSoundEnabled();
+    int cur_snd_idx = GetNotifSoundIndex();
+    static const char* kSoundNames[6] = {
+        "Chime Bell",
+        "Ding Dong",
+        "Whistle",
+        "Crystal Drop",
+        "Bubble Pop",
+        "Radar Pulse"
+    };
+
     if (width_ > 240) {
         // === RESPONSIVE LANDSCAPE LAYOUT (320x240) ===
-        // Left Column (x=10, w=146): Volume Slider & Presets
-        lv_obj_t* card = MakePanel(root, 10, 40, 146, 160, C_PANEL, C_BORDER, 10);
+        lv_obj_t* list = lv_obj_create(root);
+        lv_obj_set_pos(list, 0, 32);
+        lv_obj_set_size(list, 320, height_ - 62);
+        lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 40, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+        lv_obj_set_scroll_dir(list, LV_DIR_VER);
+
+        lv_obj_add_event_cb(list, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->audio_scroll_y_ = lv_obj_get_scroll_y((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
+
+        // Left Column (x=8, y=6, w=148, h=156): Volume Card
+        lv_obj_t* card = MakePanel(list, 8, 6, 148, 156, C_PANEL, C_BORDER, 10);
         MakeIcon(card, ICON_AUDIO, 8, 8, C_AMBER, 20);
         MakeLabel(card, "Volume", 32, 8, 54, 16, FONT_12, C_TEXT);
 
         char vol_str[16];
         snprintf(vol_str, sizeof(vol_str), "%d%%", vol);
-        audio_volume_label_ = MakeLabel(card, vol_str, 86, 6, 50, 18, FONT_14, C_CYAN, LV_TEXT_ALIGN_RIGHT);
+        audio_volume_label_ = MakeLabel(card, vol_str, 88, 6, 50, 18, FONT_14, C_CYAN, LV_TEXT_ALIGN_RIGHT);
 
         audio_volume_slider_ = lv_slider_create(card);
         lv_obj_set_pos(audio_volume_slider_, 8, 32);
-        lv_obj_set_size(audio_volume_slider_, 130, 14);
+        lv_obj_set_size(audio_volume_slider_, 132, 14);
         lv_slider_set_range(audio_volume_slider_, 0, 100);
         lv_slider_set_value(audio_volume_slider_, vol, LV_ANIM_OFF);
         lv_obj_set_style_bg_color(audio_volume_slider_, C_PANEL_2, LV_PART_MAIN);
@@ -3686,10 +3745,10 @@ void NovaDisplay::BuildAudio() {
             char p_txt[12];
             snprintf(p_txt, sizeof(p_txt), "%d%%", p_val);
             lv_obj_t* p_btn = lv_btn_create(card);
-            int bx = (i % 2 == 0) ? 8 : 74;
+            int bx = (i % 2 == 0) ? 8 : 76;
             int by = (i < 2) ? 58 : 90;
             lv_obj_set_pos(p_btn, bx, by);
-            lv_obj_set_size(p_btn, 58, 26);
+            lv_obj_set_size(p_btn, 60, 26);
             bool is_match = (vol == p_val);
             StyleButton(p_btn, is_match ? C_PANEL_2 : C_PANEL, is_match ? C_CYAN : C_BORDER, 6);
             lv_obj_t* lbl = lv_label_create(p_btn);
@@ -3717,26 +3776,26 @@ void NovaDisplay::BuildAudio() {
                 self->BuildCurrentPage();
             }, LV_EVENT_CLICKED, this);
         }
-        MakeLabel(card, "ES8311 DAC + SC8002B", 8, 126, 130, 16, FONT_10, C_MUTED);
+        MakeLabel(card, "ES8311 + SC8002B", 8, 126, 132, 16, FONT_10, C_MUTED);
 
-        // Right Column (x=164, w=146): Mute & Haptic Toggle Buttons
-        lv_obj_t* mute = lv_btn_create(root);
-        lv_obj_set_pos(mute, 164, 40); lv_obj_set_size(mute, 146, 76);
-        StyleButton(mute, C_PANEL, muted_ ? C_AMBER : C_BORDER, 10);
-        MakeIcon(mute, ICON_AUDIO, 10, 20, muted_ ? C_AMBER : C_CYAN, 26);
-        MakeLabel(mute, "Bisukan Speaker", 42, 14, 98, 18, FONT_12, C_TEXT);
-        MakeLabel(mute, muted_ ? "MUTE (Senyap)" : "Suara Aktif", 42, 34, 98, 14, FONT_10, muted_ ? C_AMBER : C_MUTED);
-        MakeLabel(mute, muted_ ? "STATUS: OFF" : "STATUS: ON", 42, 50, 98, 14, FONT_10, muted_ ? C_AMBER : C_MINT);
+        // Right Column (x=164, w=148): Mute, Haptic, Notif Sound Toggle
+        lv_obj_t* mute = lv_btn_create(list);
+        lv_obj_set_pos(mute, 164, 6); lv_obj_set_size(mute, 148, 48);
+        StyleButton(mute, C_PANEL, muted_ ? C_AMBER : C_BORDER, 8);
+        MakeIcon(mute, ICON_AUDIO, 8, 14, muted_ ? C_AMBER : C_CYAN, 20);
+        MakeLabel(mute, "Bisukan Speaker", 34, 6, 80, 16, FONT_10, C_TEXT);
+        MakeLabel(mute, muted_ ? "MUTE" : "Suara Aktif", 34, 24, 80, 14, FONT_10, muted_ ? C_AMBER : C_MUTED);
+        MakeLabel(mute, muted_ ? "ON" : "OFF", 116, 14, 26, 16, FONT_10, muted_ ? C_AMBER : C_MINT, LV_TEXT_ALIGN_RIGHT);
         lv_obj_add_event_cb(mute, OnMuteTileClicked, LV_EVENT_CLICKED, this);
 
         bool haptic = callbacks_.get_haptic ? callbacks_.get_haptic() : true;
-        lv_obj_t* haptic_btn = lv_btn_create(root);
-        lv_obj_set_pos(haptic_btn, 164, 124); lv_obj_set_size(haptic_btn, 146, 76);
-        StyleButton(haptic_btn, C_PANEL, haptic ? C_MINT : C_BORDER, 10);
-        MakeIcon(haptic_btn, ICON_CHIP, 10, 20, haptic ? C_MINT : C_MUTED, 26);
-        MakeLabel(haptic_btn, "Suara Haptik", 42, 14, 98, 18, FONT_12, C_TEXT);
-        MakeLabel(haptic_btn, haptic ? "Klik Disentuh" : "Dimatikan", 42, 34, 98, 14, FONT_10, C_MUTED);
-        MakeLabel(haptic_btn, haptic ? "STATUS: ON" : "STATUS: OFF", 42, 50, 98, 14, FONT_10, haptic ? C_MINT : C_MUTED);
+        lv_obj_t* haptic_btn = lv_btn_create(list);
+        lv_obj_set_pos(haptic_btn, 164, 60); lv_obj_set_size(haptic_btn, 148, 48);
+        StyleButton(haptic_btn, C_PANEL, haptic ? C_MINT : C_BORDER, 8);
+        MakeIcon(haptic_btn, ICON_CHIP, 8, 14, haptic ? C_MINT : C_MUTED, 20);
+        MakeLabel(haptic_btn, "Suara Haptik", 34, 6, 80, 16, FONT_10, C_TEXT);
+        MakeLabel(haptic_btn, haptic ? "Klik Sentuh" : "Dimatikan", 34, 24, 80, 14, FONT_10, C_MUTED);
+        MakeLabel(haptic_btn, haptic ? "ON" : "OFF", 116, 14, 26, 16, FONT_10, haptic ? C_MINT : C_MUTED, LV_TEXT_ALIGN_RIGHT);
         lv_obj_add_event_cb(haptic_btn, [](lv_event_t* e) {
             if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
             auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
@@ -3746,10 +3805,101 @@ void NovaDisplay::BuildAudio() {
                 self->BuildCurrentPage();
             }
         }, LV_EVENT_CLICKED, this);
+
+        lv_obj_t* notif_tgl = lv_btn_create(list);
+        lv_obj_set_pos(notif_tgl, 164, 114); lv_obj_set_size(notif_tgl, 148, 48);
+        StyleButton(notif_tgl, C_PANEL, snd_enabled ? C_CYAN : C_BORDER, 8);
+        MakeIcon(notif_tgl, ICON_CHAT, 8, 14, snd_enabled ? C_CYAN : C_MUTED, 20);
+        MakeLabel(notif_tgl, "Suara Notif HP", 34, 6, 80, 16, FONT_10, C_TEXT);
+        MakeLabel(notif_tgl, snd_enabled ? "Bunyi Aktif" : "Senyap", 34, 24, 80, 14, FONT_10, snd_enabled ? C_CYAN : C_MUTED);
+        MakeLabel(notif_tgl, snd_enabled ? "ON" : "OFF", 116, 14, 26, 16, FONT_10, snd_enabled ? C_CYAN : C_MUTED, LV_TEXT_ALIGN_RIGHT);
+        lv_obj_add_event_cb(notif_tgl, [](lv_event_t* e) {
+            if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) {
+                bool en = self->IsNotifSoundEnabled();
+                self->SetNotifSoundEnabled(!en);
+                if (!en) self->PreviewNotifSound(self->GetNotifSoundIndex());
+                self->BuildCurrentPage();
+            }
+        }, LV_EVENT_CLICKED, this);
+
+        // Section: Pilihan Suara Notifikasi
+        MakeLabel(list, "PILIHAN NADA SUARA NOTIFIKASI", 10, 172, 300, 16, FONT_10, C_MUTED);
+
+        for (int i = 0; i < 6; ++i) {
+            int col = i % 3;
+            int row = i / 3;
+            int bx = 8 + col * 102;
+            int by = 192 + row * 34;
+            bool is_cur = (cur_snd_idx == i);
+            lv_obj_t* s_btn = lv_btn_create(list);
+            lv_obj_set_pos(s_btn, bx, by);
+            lv_obj_set_size(s_btn, 98, 28);
+            StyleButton(s_btn, is_cur ? C_PANEL_2 : C_PANEL, is_cur ? C_CYAN : C_BORDER, 6);
+            if (is_cur) lv_obj_set_style_border_width(s_btn, 2, 0);
+
+            lv_obj_t* lbl = lv_label_create(s_btn);
+            lv_label_set_text(lbl, kSoundNames[i]);
+            lv_obj_set_style_text_font(lbl, FONT_10, 0);
+            lv_obj_set_style_text_color(lbl, is_cur ? C_CYAN : C_TEXT, 0);
+            lv_obj_center(lbl);
+
+            lv_obj_set_user_data(s_btn, (void*)(intptr_t)i);
+            lv_obj_add_event_cb(s_btn, [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (!self) return;
+                lv_obj_t* b = (lv_obj_t*)lv_event_get_current_target(e);
+                if (!b) b = (lv_obj_t*)lv_event_get_target(e);
+                int idx = (int)(intptr_t)lv_obj_get_user_data(b);
+                self->SetNotifSoundIndex(idx);
+                self->PreviewNotifSound(idx);
+                self->BuildCurrentPage();
+            }, LV_EVENT_CLICKED, this);
+        }
+
+        // Preview Button
+        lv_obj_t* prev_btn = lv_btn_create(list);
+        lv_obj_set_pos(prev_btn, 8, 268);
+        lv_obj_set_size(prev_btn, 304, 30);
+        StyleButton(prev_btn, C_PANEL_2, C_CYAN, 8);
+        lv_obj_t* p_lbl = lv_label_create(prev_btn);
+        char p_str[64];
+        snprintf(p_str, sizeof(p_str), "▶ PREVIEW SUARA: %s", kSoundNames[cur_snd_idx % 6]);
+        lv_label_set_text(p_lbl, p_str);
+        lv_obj_set_style_text_font(p_lbl, FONT_10, 0);
+        lv_obj_set_style_text_color(p_lbl, C_CYAN, 0);
+        lv_obj_center(p_lbl);
+        lv_obj_add_event_cb(prev_btn, [](lv_event_t* e) {
+            if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->PreviewNotifSound(self->GetNotifSoundIndex());
+        }, LV_EVENT_CLICKED, this);
+
+        MakeLabel(list, "Amplifier SC8002B onboard berdaya 1W.", 10, 306, 300, 16, FONT_10, C_MUTED);
+
+        if (audio_scroll_y_ > 0) lv_obj_scroll_to_y(list, audio_scroll_y_, LV_ANIM_OFF);
+
     } else {
         // === PORTRAIT LAYOUT (240x320) ===
-        // Card 1: Interactive Volume Slider & Presets (Height: 98px)
-        lv_obj_t* card = MakePanel(root, 12, 42, 216, 98, C_PANEL, C_BORDER, 12);
+        lv_obj_t* list = lv_obj_create(root);
+        lv_obj_set_pos(list, 0, 36);
+        lv_obj_set_size(list, 240, height_ - 67);
+        lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 60, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+        lv_obj_set_scroll_dir(list, LV_DIR_VER);
+
+        lv_obj_add_event_cb(list, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->audio_scroll_y_ = lv_obj_get_scroll_y((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
+
+        // 1. Volume Card (y=6, h=98)
+        lv_obj_t* card = MakePanel(list, 12, 6, 216, 98, C_PANEL, C_BORDER, 12);
         MakeIcon(card, ICON_AUDIO, 10, 10, C_AMBER, 22);
         MakeLabel(card, "Volume Speaker", 38, 10, 110, 18, FONT_14, C_TEXT);
 
@@ -3796,7 +3946,7 @@ void NovaDisplay::BuildAudio() {
             }
         }, LV_EVENT_VALUE_CHANGED, this);
 
-        // Preset Buttons: 25%, 50%, 75%, 100%
+        // Presets: 25%, 50%, 75%, 100%
         static const int presets[] = {25, 50, 75, 100};
         for (int i = 0; i < 4; ++i) {
             int p_val = presets[i];
@@ -3833,10 +3983,12 @@ void NovaDisplay::BuildAudio() {
             }, LV_EVENT_CLICKED, this);
         }
 
-        MakeLabel(root, "KONTROL SUARA", 14, 146, 212, 14, FONT_10, C_MUTED);
+        // Section: Kontrol Suara
+        MakeLabel(list, "KONTROL SUARA", 14, 110, 212, 14, FONT_10, C_MUTED);
 
-        lv_obj_t* mute = lv_btn_create(root);
-        lv_obj_set_pos(mute, 12, 164); lv_obj_set_size(mute, 216, 40);
+        // Mute Button
+        lv_obj_t* mute = lv_btn_create(list);
+        lv_obj_set_pos(mute, 12, 128); lv_obj_set_size(mute, 216, 40);
         StyleButton(mute, C_PANEL, C_BORDER, 10);
         MakeIcon(mute, ICON_AUDIO, 12, 8, muted_ ? C_MUTED : C_AMBER, 22);
         MakeLabel(mute, "Bisukan speaker", 44, 4, 120, 18, FONT_14, C_TEXT);
@@ -3844,9 +3996,10 @@ void NovaDisplay::BuildAudio() {
         MakeLabel(mute, muted_ ? "ON" : "OFF", 169, 11, 34, 18, FONT_14, muted_ ? C_AMBER : C_CYAN, LV_TEXT_ALIGN_RIGHT);
         lv_obj_add_event_cb(mute, OnMuteTileClicked, LV_EVENT_CLICKED, this);
 
+        // Haptic Button
         bool haptic = callbacks_.get_haptic ? callbacks_.get_haptic() : true;
-        lv_obj_t* haptic_btn = lv_btn_create(root);
-        lv_obj_set_pos(haptic_btn, 12, 208); lv_obj_set_size(haptic_btn, 216, 40);
+        lv_obj_t* haptic_btn = lv_btn_create(list);
+        lv_obj_set_pos(haptic_btn, 12, 174); lv_obj_set_size(haptic_btn, 216, 40);
         StyleButton(haptic_btn, C_PANEL, C_BORDER, 10);
         MakeIcon(haptic_btn, ICON_CHIP, 12, 8, haptic ? C_MINT : C_MUTED, 22);
         MakeLabel(haptic_btn, "Suara haptik sentuh", 44, 4, 130, 18, FONT_14, C_TEXT);
@@ -3861,9 +4014,86 @@ void NovaDisplay::BuildAudio() {
                 self->BuildCurrentPage();
             }
         }, LV_EVENT_CLICKED, this);
+
+        // Section: Suara Notifikasi HP
+        MakeLabel(list, "SUARA NOTIFIKASI HP", 14, 222, 212, 14, FONT_10, C_MUTED);
+
+        // Notification Sound ON/OFF Toggle
+        lv_obj_t* notif_tgl = lv_btn_create(list);
+        lv_obj_set_pos(notif_tgl, 12, 238); lv_obj_set_size(notif_tgl, 216, 40);
+        StyleButton(notif_tgl, C_PANEL, snd_enabled ? C_CYAN : C_BORDER, 10);
+        MakeIcon(notif_tgl, ICON_CHAT, 12, 8, snd_enabled ? C_CYAN : C_MUTED, 22);
+        MakeLabel(notif_tgl, "Bunyi notifikasi HP", 44, 4, 125, 18, FONT_14, C_TEXT);
+        MakeLabel(notif_tgl, snd_enabled ? "Dering notif aktif" : "Senyap saat ada pesan", 44, 22, 125, 14, FONT_10, snd_enabled ? C_CYAN : C_MUTED);
+        MakeLabel(notif_tgl, snd_enabled ? "ON" : "OFF", 169, 11, 34, 18, FONT_14, snd_enabled ? C_CYAN : C_MUTED, LV_TEXT_ALIGN_RIGHT);
+        lv_obj_add_event_cb(notif_tgl, [](lv_event_t* e) {
+            if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) {
+                bool en = self->IsNotifSoundEnabled();
+                self->SetNotifSoundEnabled(!en);
+                if (!en) self->PreviewNotifSound(self->GetNotifSoundIndex());
+                self->BuildCurrentPage();
+            }
+        }, LV_EVENT_CLICKED, this);
+
+        // 6 Sound Choice Buttons (2 cols x 3 rows)
+        for (int i = 0; i < 6; ++i) {
+            int col = i % 2;
+            int row = i / 2;
+            int bx = 12 + col * 110;
+            int by = 286 + row * 34;
+            bool is_cur = (cur_snd_idx == i);
+
+            lv_obj_t* s_btn = lv_btn_create(list);
+            lv_obj_set_pos(s_btn, bx, by);
+            lv_obj_set_size(s_btn, 106, 28);
+            StyleButton(s_btn, is_cur ? C_PANEL_2 : C_PANEL, is_cur ? C_CYAN : C_BORDER, 6);
+            if (is_cur) lv_obj_set_style_border_width(s_btn, 2, 0);
+
+            lv_obj_t* lbl = lv_label_create(s_btn);
+            lv_label_set_text(lbl, kSoundNames[i]);
+            lv_obj_set_style_text_font(lbl, FONT_10, 0);
+            lv_obj_set_style_text_color(lbl, is_cur ? C_CYAN : C_TEXT, 0);
+            lv_obj_center(lbl);
+
+            lv_obj_set_user_data(s_btn, (void*)(intptr_t)i);
+            lv_obj_add_event_cb(s_btn, [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (!self) return;
+                lv_obj_t* b = (lv_obj_t*)lv_event_get_current_target(e);
+                if (!b) b = (lv_obj_t*)lv_event_get_target(e);
+                int idx = (int)(intptr_t)lv_obj_get_user_data(b);
+                self->SetNotifSoundIndex(idx);
+                self->PreviewNotifSound(idx);
+                self->BuildCurrentPage();
+            }, LV_EVENT_CLICKED, this);
+        }
+
+        // Preview Button
+        lv_obj_t* prev_btn = lv_btn_create(list);
+        lv_obj_set_pos(prev_btn, 12, 394);
+        lv_obj_set_size(prev_btn, 216, 32);
+        StyleButton(prev_btn, C_PANEL_2, C_CYAN, 8);
+        lv_obj_t* p_lbl = lv_label_create(prev_btn);
+        char p_str[64];
+        snprintf(p_str, sizeof(p_str), "▶ PREVIEW: %s", kSoundNames[cur_snd_idx % 6]);
+        lv_label_set_text(p_lbl, p_str);
+        lv_obj_set_style_text_font(p_lbl, FONT_12, 0);
+        lv_obj_set_style_text_color(p_lbl, C_CYAN, 0);
+        lv_obj_center(p_lbl);
+        lv_obj_add_event_cb(prev_btn, [](lv_event_t* e) {
+            if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->PreviewNotifSound(self->GetNotifSoundIndex());
+        }, LV_EVENT_CLICKED, this);
+
+        MakeLabel(list, "Amplifier SC8002B onboard berdaya 1W.", 14, 434, 212, 16, FONT_10, C_MUTED);
+
+        if (audio_scroll_y_ > 0) lv_obj_scroll_to_y(list, audio_scroll_y_, LV_ANIM_OFF);
     }
 
-    MakeLabel(root, "Amplifier SC8002B onboard berdaya 1W.", 14, 254, 212, 16, FONT_10, C_MUTED);
     MakeBottomNav(root, PAGE_AUDIO);
 }
 
@@ -9896,10 +10126,10 @@ static void nav_draw_car(uint8_t* buf, uint16_t color, uint16_t cutout) {
 void NovaDisplay::RenderNavIcon(const std::string& maneuver, const std::string& directions, bool has_icon, const uint8_t* icon_data) {
     if (!nav_icon_buf_) return;
 
-    // Dark slate background: 0x1A2636
-    uint16_t bg_color = 0x1926;
-    // Bright sky blue foreground: 0x38BDF8
-    uint16_t fg_color = 0x3DFE;
+    uint32_t bg_rgb = lv_color_to_int(C_PANEL_2);
+    uint16_t bg_color = (uint16_t)((((bg_rgb >> 16) & 0xF8) << 8) | (((bg_rgb >> 8) & 0xFC) << 3) | ((bg_rgb & 0xF8) >> 3));
+    uint32_t fg_rgb = lv_color_to_int(C_CYAN);
+    uint16_t fg_color = (uint16_t)((((fg_rgb >> 16) & 0xF8) << 8) | (((fg_rgb >> 8) & 0xFC) << 3) | ((fg_rgb & 0xF8) >> 3));
 
     if (has_icon && icon_data) {
         for (int y = 0; y < 48; y++) {
@@ -9983,8 +10213,8 @@ void NovaDisplay::BuildNav() {
         // Tanpa header/pill "SIAP BUKA MAPS" agar tidak menghalangi dan luas!
 
         // 1. Kartu Manuver & Belokan Utama (y=36, h=146)
-        lv_obj_t* card = MakePanel(root, content_x, 36, content_w, 146, lv_color_hex(0x131B26), 
-                                   active ? lv_color_hex(0x06B6D4) : C_BORDER, 12);
+        lv_obj_t* card = MakePanel(root, content_x, 36, content_w, 146, C_PANEL, 
+                                   active ? C_CYAN : C_BORDER, 12);
         lv_obj_set_style_border_width(card, 2, 0);
 
         // Icon Rute Gede & Rapih (54x54 Badge Container dengan Gambar 48x48)
@@ -9992,8 +10222,8 @@ void NovaDisplay::BuildNav() {
         lv_obj_set_pos(icon_badge, 8, 8);
         lv_obj_set_size(icon_badge, 54, 54);
         lv_obj_set_style_radius(icon_badge, 12, 0);
-        lv_obj_set_style_bg_color(icon_badge, lv_color_hex(0x1A2636), 0);
-        lv_obj_set_style_border_color(icon_badge, lv_color_hex(0x38BDF8), 0);
+        lv_obj_set_style_bg_color(icon_badge, C_PANEL_2, 0);
+        lv_obj_set_style_border_color(icon_badge, C_CYAN, 0);
         lv_obj_set_style_border_width(icon_badge, 2, 0);
         lv_obj_set_style_pad_all(icon_badge, 0, 0);
         lv_obj_clear_flag(icon_badge, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
@@ -10006,7 +10236,7 @@ void NovaDisplay::BuildNav() {
 
         // Jarak Belokan Berikutnya
         std::string dist_str = dist.empty() ? "-- m" : dist;
-        MakeLabel(card, dist_str.c_str(), 70, 6, content_w - 78, 30, FONT_28, lv_color_hex(0x38BDF8));
+        MakeLabel(card, dist_str.c_str(), 70, 6, content_w - 78, 30, FONT_28, C_CYAN);
 
         // Status GPS Aktif
         std::string status_txt = active ? "● Rute GPS Aktif" : "Menunggu Rute...";
@@ -10014,12 +10244,12 @@ void NovaDisplay::BuildNav() {
 
         // Instruksi Manuver (e.g. Belok Kanan)
         std::string dir_str = dir.empty() ? "Mulai rute navigasi di ponsel" : dir;
-        lv_obj_t* dir_lbl = MakeLabel(card, dir_str.c_str(), 10, 68, content_w - 20, 24, FONT_14, lv_color_hex(0xFFFFFF));
+        lv_obj_t* dir_lbl = MakeLabel(card, dir_str.c_str(), 10, 68, content_w - 20, 24, FONT_14, C_TEXT);
         lv_label_set_long_mode(dir_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         // Nama Jalan Tujuan (e.g. ke Jl. Sudirman)
         std::string title_str = title.empty() ? "Menunggu tujuan..." : title;
-        lv_obj_t* street_lbl = MakeLabel(card, title_str.c_str(), 10, 94, content_w - 20, 22, FONT_12, lv_color_hex(0xFBBF24));
+        lv_obj_t* street_lbl = MakeLabel(card, title_str.c_str(), 10, 94, content_w - 20, 22, FONT_12, C_AMBER);
         lv_label_set_long_mode(street_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         // Catatan Info
@@ -10027,33 +10257,33 @@ void NovaDisplay::BuildNav() {
                   10, 120, content_w - 20, 16, FONT_10, C_MUTED);
 
         // 2. Kartu Telemetri (ETA, Durasi, Kecepatan) (y=190, h=76)
-        lv_obj_t* tcard = MakePanel(root, content_x, 190, content_w, 76, lv_color_hex(0x18181B), C_BORDER, 10);
+        lv_obj_t* tcard = MakePanel(root, content_x, 190, content_w, 76, C_PANEL, C_BORDER, 10);
 
         // Panel Kiri: Estimasi Tiba (ETA) & Sisa Waktu
         int half_w = (content_w - 16) / 2;
-        lv_obj_t* p_left = MakePanel(tcard, 6, 6, half_w, 64, lv_color_hex(0x222228), C_BORDER, 8);
+        lv_obj_t* p_left = MakePanel(tcard, 6, 6, half_w, 64, C_PANEL_2, C_BORDER, 8);
         MakeLabel(p_left, "ESTIMASI TIBA", 6, 4, half_w - 12, 14, FONT_10, C_MUTED);
         
         // Teks ETA dikecilkan (FONT_12) agar pas dan rapi tanpa terpotong
         std::string eta_clean = eta.empty() ? "--:--" : eta;
         std::string eta_txt = "ETA: " + eta_clean;
-        MakeLabel(p_left, eta_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, lv_color_hex(0xF59E0B));
+        MakeLabel(p_left, eta_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, C_AMBER);
 
         std::string dur_txt = dur.empty() ? "-- mnt" : dur;
-        MakeLabel(p_left, dur_txt.c_str(), 6, 40, half_w - 12, 16, FONT_10, lv_color_hex(0x10B981));
+        MakeLabel(p_left, dur_txt.c_str(), 6, 40, half_w - 12, 16, FONT_10, C_MINT);
 
         // Panel Kanan: Kecepatan & Status
-        lv_obj_t* p_right = MakePanel(tcard, 10 + half_w, 6, half_w, 64, lv_color_hex(0x222228), C_BORDER, 8);
+        lv_obj_t* p_right = MakePanel(tcard, 10 + half_w, 6, half_w, 64, C_PANEL_2, C_BORDER, 8);
         MakeLabel(p_right, "KECEPATAN", 6, 4, half_w - 12, 14, FONT_10, C_MUTED);
         std::string spd_txt = spd.empty() ? "-- km/h" : spd;
-        MakeLabel(p_right, spd_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, lv_color_hex(0x38BDF8));
+        MakeLabel(p_right, spd_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, C_CYAN);
         MakeLabel(p_right, active ? "GPS Live" : "Standby", 6, 40, half_w - 12, 16, FONT_10, C_MUTED);
 
     } else {
         // === LANDSCAPE LAYOUT (320x240) ===
 
         // Left Column: Route & Distance (w=176, h=166)
-        lv_obj_t* card = MakePanel(root, 8, 36, 176, 166, lv_color_hex(0x131B26), lv_color_hex(0x06B6D4), 12);
+        lv_obj_t* card = MakePanel(root, 8, 36, 176, 166, C_PANEL, active ? C_CYAN : C_BORDER, 12);
         lv_obj_set_style_border_width(card, 2, 0);
 
         // Large Turn Icon Badge
@@ -10061,8 +10291,8 @@ void NovaDisplay::BuildNav() {
         lv_obj_set_pos(icon_badge, 8, 8);
         lv_obj_set_size(icon_badge, 54, 54);
         lv_obj_set_style_radius(icon_badge, 12, 0);
-        lv_obj_set_style_bg_color(icon_badge, lv_color_hex(0x1A2636), 0);
-        lv_obj_set_style_border_color(icon_badge, lv_color_hex(0x38BDF8), 0);
+        lv_obj_set_style_bg_color(icon_badge, C_PANEL_2, 0);
+        lv_obj_set_style_border_color(icon_badge, C_CYAN, 0);
         lv_obj_set_style_border_width(icon_badge, 2, 0);
         lv_obj_set_style_pad_all(icon_badge, 0, 0);
         lv_obj_clear_flag(icon_badge, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
@@ -10075,34 +10305,34 @@ void NovaDisplay::BuildNav() {
 
         std::string dist_str = dist.empty() ? "-- m" : dist;
         lv_obj_t* dist_lbl = MakeLabel(card, dist_str.c_str(), 68, 6, 100, 30, FONT_24, C_TEXT);
-        lv_obj_set_style_text_color(dist_lbl, lv_color_hex(0x38BDF8), 0);
+        lv_obj_set_style_text_color(dist_lbl, C_CYAN, 0);
 
         std::string status_txt = active ? "● Rute GPS Aktif" : "Menunggu Rute...";
         MakeLabel(card, status_txt.c_str(), 68, 36, 100, 16, FONT_10, active ? C_MINT : C_MUTED);
 
         std::string dir_str = dir.empty() ? "Buka Google Maps di HP" : dir;
-        lv_obj_t* dir_lbl = MakeLabel(card, dir_str.c_str(), 8, 68, 160, 24, FONT_12, lv_color_hex(0xFFFFFF));
+        lv_obj_t* dir_lbl = MakeLabel(card, dir_str.c_str(), 8, 68, 160, 24, FONT_12, C_TEXT);
         lv_label_set_long_mode(dir_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         std::string title_str = title.empty() ? "Menunggu rute..." : title;
-        lv_obj_t* street_lbl = MakeLabel(card, title_str.c_str(), 8, 94, 160, 20, FONT_10, lv_color_hex(0xFBBF24));
+        lv_obj_t* street_lbl = MakeLabel(card, title_str.c_str(), 8, 94, 160, 20, FONT_10, C_AMBER);
         lv_label_set_long_mode(street_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         MakeLabel(card, active ? "Notifikasi diredam" : "Bluetooth Chronos", 8, 118, 160, 16, FONT_10, C_MUTED);
 
         // Right Column: Telemetry Dashboard (w=124, h=166)
-        lv_obj_t* tcard = MakePanel(root, 188, 36, 124, 166, lv_color_hex(0x18181B), C_BORDER, 10);
+        lv_obj_t* tcard = MakePanel(root, 188, 36, 124, 166, C_PANEL, C_BORDER, 10);
         MakeLabel(tcard, "ESTIMASI TIBA", 8, 8, 108, 14, FONT_10, C_MUTED);
         std::string eta_txt = "ETA: " + (eta.empty() ? "--:--" : eta);
-        MakeLabel(tcard, eta_txt.c_str(), 8, 24, 108, 18, FONT_12, lv_color_hex(0xF59E0B));
+        MakeLabel(tcard, eta_txt.c_str(), 8, 24, 108, 18, FONT_12, C_AMBER);
 
         MakeLabel(tcard, "SISA WAKTU", 8, 54, 108, 14, FONT_10, C_MUTED);
         std::string dur_txt = dur.empty() ? "-- mnt" : dur;
-        MakeLabel(tcard, dur_txt.c_str(), 8, 68, 108, 18, FONT_12, lv_color_hex(0x10B981));
+        MakeLabel(tcard, dur_txt.c_str(), 8, 68, 108, 18, FONT_12, C_MINT);
 
         MakeLabel(tcard, "KECEPATAN", 8, 98, 108, 14, FONT_10, C_MUTED);
         std::string spd_txt = spd.empty() ? "-- km/h" : spd;
-        MakeLabel(tcard, spd_txt.c_str(), 8, 112, 108, 18, FONT_12, lv_color_hex(0x38BDF8));
+        MakeLabel(tcard, spd_txt.c_str(), 8, 112, 108, 18, FONT_12, C_CYAN);
     }
 
     MakeBottomNav(root, PAGE_NAV);
@@ -10143,15 +10373,15 @@ void NovaDisplay::BuildBtMusic() {
                                         text_x, is_land ? 38 : 98, text_w, 18, FONT_12, C_MUTED);
     lv_label_set_long_mode(a_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
-    // Media Control Buttons (Prev, Play/Pause, Next)
+    // Media Control Buttons (Prev, Play/Pause, Next) with clean 16px separation
     int btn_y = is_land ? 74 : 126;
-    int btn_w = 44, btn_h = 36;
+    int btn_w = 42, btn_h = 36;
     int center_btn_x = content_w / 2;
 
-    // Previous Button
+    // Previous Button (left of play_btn with 16px gap)
     lv_obj_t* prev_btn = lv_btn_create(card);
     lv_obj_set_size(prev_btn, btn_w, btn_h);
-    lv_obj_set_pos(prev_btn, center_btn_x - btn_w - 24, btn_y);
+    lv_obj_set_pos(prev_btn, center_btn_x - 84, btn_y);
     StyleButton(prev_btn, C_PANEL_2, C_BORDER, 8);
     lv_obj_t* p_icon = lv_label_create(prev_btn);
     lv_obj_set_style_text_font(p_icon, FONT_ICON, 0);
@@ -10182,10 +10412,10 @@ void NovaDisplay::BuildBtMusic() {
         if (self && self->callbacks_.trigger_click) self->callbacks_.trigger_click();
     }, LV_EVENT_CLICKED, this);
 
-    // Next Button
+    // Next Button (right of play_btn with 16px gap)
     lv_obj_t* next_btn = lv_btn_create(card);
     lv_obj_set_size(next_btn, btn_w, btn_h);
-    lv_obj_set_pos(next_btn, center_btn_x + 24, btn_y);
+    lv_obj_set_pos(next_btn, center_btn_x + 42, btn_y);
     StyleButton(next_btn, C_PANEL_2, C_BORDER, 8);
     lv_obj_t* n_icon = lv_label_create(next_btn);
     lv_obj_set_style_text_font(n_icon, FONT_ICON, 0);
@@ -10770,13 +11000,13 @@ void NovaDisplay::ShowNotificationDetail(int notif_idx) {
     int card_w = is_land ? 296 : 226;
     int card_h = is_land ? 224 : 290;
 
-    uint32_t border_color = 0x38BDF8;
+    uint32_t border_color = lv_color_to_int(C_CYAN);
     if (app.find("WhatsApp") != std::string::npos || app.find("WA") != std::string::npos) border_color = 0x10B981;
     else if (app.find("Telegram") != std::string::npos) border_color = 0x0284C7;
     else if (app.find("Instagram") != std::string::npos) border_color = 0xEC4899;
     else if (app.find("YouTube") != std::string::npos) border_color = 0xEF4444;
 
-    lv_obj_t* card = MakePanel(notif_detail_modal_, 0, 0, card_w, card_h, lv_color_hex(0x18181B), lv_color_hex(border_color), 12);
+    lv_obj_t* card = MakePanel(notif_detail_modal_, 0, 0, card_w, card_h, C_PANEL, lv_color_hex(border_color), 12);
     lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -10790,7 +11020,7 @@ void NovaDisplay::ShowNotificationDetail(int notif_idx) {
     lv_obj_t* close_btn = lv_btn_create(card);
     lv_obj_set_size(close_btn, 24, 22);
     lv_obj_set_pos(close_btn, card_w - 30, 8);
-    StyleButton(close_btn, lv_color_hex(0x27272A), lv_color_hex(0x3F3F46), 4);
+    StyleButton(close_btn, C_PANEL_2, C_BORDER, 4);
     lv_obj_t* close_lbl = lv_label_create(close_btn);
     lv_obj_set_style_text_font(close_lbl, FONT_ICON, 0);
     lv_label_set_text(close_lbl, MATERIAL_SYMBOLS_CLOSE);
@@ -10805,13 +11035,13 @@ void NovaDisplay::ShowNotificationDetail(int notif_idx) {
     lv_obj_t* div = lv_obj_create(card);
     lv_obj_set_pos(div, 8, 34);
     lv_obj_set_size(div, card_w - 16, 1);
-    lv_obj_set_style_bg_color(div, lv_color_hex(0x3F3F46), 0);
+    lv_obj_set_style_bg_color(div, C_BORDER, 0);
     lv_obj_set_style_border_width(div, 0, 0);
 
     // Sender / Title
     std::string sender_str = title.empty() ? "(Tanpa Subjek / Pengirim)" : title;
     MakeLabel(card, "PENGIRIM / JUDUL:", 10, 40, card_w - 20, 14, FONT_10, C_MUTED);
-    lv_obj_t* t_lbl = MakeLabel(card, sender_str.c_str(), 10, 54, card_w - 20, 20, FONT_14, lv_color_white());
+    lv_obj_t* t_lbl = MakeLabel(card, sender_str.c_str(), 10, 54, card_w - 20, 20, FONT_14, C_TEXT);
     lv_label_set_long_mode(t_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
     // Scrollable Message Body Container
@@ -10820,8 +11050,8 @@ void NovaDisplay::ShowNotificationDetail(int notif_idx) {
     lv_obj_t* body_box = lv_obj_create(card);
     lv_obj_set_pos(body_box, 8, body_y);
     lv_obj_set_size(body_box, card_w - 16, body_h);
-    lv_obj_set_style_bg_color(body_box, lv_color_hex(0x27272A), 0);
-    lv_obj_set_style_border_color(body_box, lv_color_hex(0x3F3F46), 0);
+    lv_obj_set_style_bg_color(body_box, C_PANEL_2, 0);
+    lv_obj_set_style_border_color(body_box, C_BORDER, 0);
     lv_obj_set_style_border_width(body_box, 1, 0);
     lv_obj_set_style_radius(body_box, 8, 0);
     lv_obj_set_style_pad_all(body_box, 6, 0);
@@ -10831,13 +11061,13 @@ void NovaDisplay::ShowNotificationDetail(int notif_idx) {
     lv_obj_t* msg_lbl = lv_label_create(body_box);
     lv_obj_set_width(msg_lbl, card_w - 32);
     lv_obj_set_style_text_font(msg_lbl, FONT_12, 0);
-    lv_obj_set_style_text_color(msg_lbl, lv_color_hex(0xE2E8F0), 0);
+    lv_obj_set_style_text_color(msg_lbl, C_TEXT, 0);
     lv_label_set_long_mode(msg_lbl, LV_LABEL_LONG_WRAP);
     lv_label_set_text(msg_lbl, msg.empty() ? "(Pesan kosong)" : msg.c_str());
 
     // Bottom action: Close button
     MakeButton(card, "TUTUP DETAIL", 10, card_h - 38, card_w - 20, 30,
-               lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), lv_color_white(), FONT_12,
+               C_PANEL_2, C_CYAN, C_TEXT, FONT_12,
                [](lv_event_t* e) {
                    auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                    if (self) self->DismissNotificationDetail();

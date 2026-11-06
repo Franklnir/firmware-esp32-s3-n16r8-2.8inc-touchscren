@@ -1078,6 +1078,102 @@ private:
                 }
                 break;
             }
+            case 201: { // NOTIF_CHIME (Uplifting melodic chime: E6 -> B6)
+                int n1 = (int)(kSampleRate * 0.08f);
+                int n2 = (int)(kSampleRate * 0.12f);
+                out_pcm.resize(n1 + n2);
+                for (int i = 0; i < n1; ++i) {
+                    float frac = (float)i / (float)n1;
+                    float env = expf(-frac * 3.5f);
+                    float s1 = sinf(2.0f * (float)M_PI * 1318.5f * ((float)i / kSampleRate));
+                    float s2 = 0.35f * sinf(2.0f * (float)M_PI * 2637.0f * ((float)i / kSampleRate));
+                    out_pcm[i] = (int16_t)(kMaxAmp * env * (s1 + s2) * 0.75f);
+                }
+                for (int i = 0; i < n2; ++i) {
+                    float frac = (float)i / (float)n2;
+                    float env = expf(-frac * 3.0f);
+                    float s1 = sinf(2.0f * (float)M_PI * 1975.5f * ((float)i / kSampleRate));
+                    float s2 = 0.35f * sinf(2.0f * (float)M_PI * 3951.0f * ((float)i / kSampleRate));
+                    out_pcm[n1 + i] = (int16_t)(kMaxAmp * env * (s1 + s2) * 0.75f);
+                }
+                break;
+            }
+            case 202: { // NOTIF_DINGDONG (Doorbell: C6 1046Hz -> G5 784Hz)
+                int n1 = (int)(kSampleRate * 0.09f);
+                int n2 = (int)(kSampleRate * 0.15f);
+                out_pcm.resize(n1 + n2);
+                for (int i = 0; i < n1; ++i) {
+                    float frac = (float)i / (float)n1;
+                    float env = expf(-frac * 3.0f);
+                    float s = sinf(2.0f * (float)M_PI * 1046.5f * ((float)i / kSampleRate));
+                    out_pcm[i] = (int16_t)(kMaxAmp * env * s * 0.85f);
+                }
+                for (int i = 0; i < n2; ++i) {
+                    float frac = (float)i / (float)n2;
+                    float env = expf(-frac * 2.5f);
+                    float s = sinf(2.0f * (float)M_PI * 784.0f * ((float)i / kSampleRate));
+                    out_pcm[n1 + i] = (int16_t)(kMaxAmp * env * s * 0.85f);
+                }
+                break;
+            }
+            case 203: { // NOTIF_WHISTLE (Chirpy smooth whistle: 1200Hz -> 2400Hz -> 1800Hz)
+                int num_samples = (int)(kSampleRate * 0.15f);
+                out_pcm.resize(num_samples);
+                float phase = 0.0f;
+                for (int i = 0; i < num_samples; ++i) {
+                    float frac = (float)i / (float)num_samples;
+                    float freq = 1200.0f + 1200.0f * sinf(frac * (float)M_PI);
+                    float env = sinf(frac * (float)M_PI);
+                    phase += 2.0f * (float)M_PI * freq / kSampleRate;
+                    out_pcm[i] = (int16_t)(kMaxAmp * 0.85f * env * sinf(phase));
+                }
+                break;
+            }
+            case 204: { // NOTIF_CRYSTAL (Glass harp 3 notes: C6 -> E6 -> G6)
+                float notes[] = { 1046.5f, 1318.5f, 1568.0f };
+                int dur = (int)(kSampleRate * 0.065f);
+                out_pcm.resize(dur * 3);
+                for (int n = 0; n < 3; ++n) {
+                    float freq = notes[n];
+                    for (int i = 0; i < dur; ++i) {
+                        float frac = (float)i / (float)dur;
+                        float env = expf(-frac * 2.8f);
+                        float s = sinf(2.0f * (float)M_PI * freq * ((float)i / kSampleRate));
+                        out_pcm[n * dur + i] = (int16_t)(kMaxAmp * 0.8f * env * s);
+                    }
+                }
+                break;
+            }
+            case 205: { // NOTIF_BUBBLE (Liquid water pop sweep: 350Hz -> 1800Hz)
+                int num_samples = (int)(kSampleRate * 0.065f);
+                out_pcm.resize(num_samples);
+                float phase = 0.0f;
+                for (int i = 0; i < num_samples; ++i) {
+                    float frac = (float)i / (float)num_samples;
+                    float freq = 350.0f + 1450.0f * (frac * frac);
+                    float env = expf(-frac * 4.0f) * sinf(frac * (float)M_PI * 0.5f);
+                    phase += 2.0f * (float)M_PI * freq / kSampleRate;
+                    out_pcm[i] = (int16_t)(kMaxAmp * 0.95f * env * sinf(phase));
+                }
+                break;
+            }
+            case 206: { // NOTIF_RADAR (Futuristic dual electronic bleep: 1900Hz / 2400Hz)
+                int d1 = (int)(kSampleRate * 0.035f);
+                int pause = (int)(kSampleRate * 0.025f);
+                int d2 = (int)(kSampleRate * 0.045f);
+                out_pcm.assign(d1 + pause + d2, 0);
+                for (int i = 0; i < d1; ++i) {
+                    float frac = (float)i / (float)d1;
+                    float env = sinf(frac * (float)M_PI);
+                    out_pcm[i] = (int16_t)(kMaxAmp * 0.85f * env * sinf(2.0f * (float)M_PI * 1900.0f * ((float)i / kSampleRate)));
+                }
+                for (int i = 0; i < d2; ++i) {
+                    float frac = (float)i / (float)d2;
+                    float env = sinf(frac * (float)M_PI);
+                    out_pcm[d1 + pause + i] = (int16_t)(kMaxAmp * 0.85f * env * sinf(2.0f * (float)M_PI * 2400.0f * ((float)i / kSampleRate)));
+                }
+                break;
+            }
             default: {
                 if (fx_id >= 100) {
                     int inst = (fx_id - 100) / 20;
@@ -1458,6 +1554,12 @@ private:
                 chronchi_display_->showNotification(notif);
             }
             ChronchiAlert::GetInstance().VibrateNotification();
+            Settings audio_s("audio", true);
+            bool snd_en = audio_s.GetInt("notif_snd_en", 1) != 0;
+            int snd_idx = audio_s.GetInt("notif_snd_idx", 0);
+            if (snd_en) {
+                TriggerGameSound(201 + (snd_idx % 6));
+            }
         });
 
         chronchi_ble_->setNavigationCallback([this](const ChronchiNavigation& nav) {

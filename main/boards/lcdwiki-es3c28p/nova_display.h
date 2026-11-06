@@ -175,6 +175,12 @@ public:
     std::string GetCurrentTextColorId() const;
     void UpdateResolvedTextColor();
 
+    bool IsNotifSoundEnabled() const;
+    void SetNotifSoundEnabled(bool en);
+    int GetNotifSoundIndex() const;
+    void SetNotifSoundIndex(int idx);
+    void PreviewNotifSound(int idx);
+
     void ShowRgbMixerModal();
     void CloseRgbMixerModal();
     void UpdateRgbMixerPreview();
@@ -689,6 +695,7 @@ private:
     int display_pal_scroll_x_ = 0;
     int display_bg_scroll_x_ = 0;
     int display_tc_scroll_x_ = 0;
+    int audio_scroll_y_ = 0;
 
     // --- RGB Mixer Modal State ---
     lv_obj_t* rgb_modal_ = nullptr;
