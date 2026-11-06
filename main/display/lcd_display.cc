@@ -646,10 +646,12 @@ void LcdDisplay::SetupUI_Theme2() {
     auto icon_font = lvgl_theme->icon_font()->font();
     auto large_icon_font = lvgl_theme->large_icon_font()->font();
 
+    const auto* synced = GetCurrentSyncedTheme();
     const auto* synced_bg = GetCurrentSyncedBg();
     lv_color_t xz_bg = (synced_bg) ? lv_color_hex(synced_bg->bg_color) : lvgl_theme->background_color();
     lv_color_t xz_panel = (synced_bg) ? lv_color_hex(synced_bg->panel_color) : lvgl_theme->background_color();
     lv_color_t xz_border = (synced_bg) ? lv_color_hex(synced_bg->border_color) : lvgl_theme->border_color();
+    lv_color_t xz_accent = (synced) ? lv_color_hex(synced->accent_color) : lv_color_hex(0x63DDF2);
 
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, text_font, 0);
@@ -674,13 +676,12 @@ void LcdDisplay::SetupUI_Theme2() {
     lv_obj_align(preview_image_, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
 
-    /* Layer 1: Top bar - header with avatar on left, wifi & battery on right */
+    /* Layer 1: Top bar - header with avatar on left, wifi & battery on right (matches Nova OS C_BG & C_BORDER) */
     top_bar_ = lv_obj_create(container_);
     lv_obj_set_size(top_bar_, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_radius(top_bar_, 0, 0);
     lv_obj_set_style_bg_opa(top_bar_, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(top_bar_, xz_panel, 0);
-    lv_obj_set_style_border_width(top_bar_, 0, 0);
+    lv_obj_set_style_bg_color(top_bar_, xz_bg, 0);
     lv_obj_set_style_border_side(top_bar_, LV_BORDER_SIDE_BOTTOM, 0);
     lv_obj_set_style_border_width(top_bar_, 1, 0);
     lv_obj_set_style_border_color(top_bar_, xz_border, 0);
@@ -710,11 +711,11 @@ void LcdDisplay::SetupUI_Theme2() {
     lv_obj_set_style_bg_opa(rot_btn, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(rot_btn, 0, 0);
     lv_obj_set_style_pad_all(rot_btn, 0, 0);
-    lv_obj_t* rot_icon = lv_label_create(rot_btn);
-    lv_label_set_text(rot_icon, MATERIAL_SYMBOLS_REFRESH);
-    lv_obj_set_style_text_font(rot_icon, icon_font, 0);
-    lv_obj_set_style_text_color(rot_icon, lv_color_hex(0x00E5FF), 0);
-    lv_obj_center(rot_icon);
+    rot_icon_label_ = lv_label_create(rot_btn);
+    lv_label_set_text(rot_icon_label_, MATERIAL_SYMBOLS_REFRESH);
+    lv_obj_set_style_text_font(rot_icon_label_, icon_font, 0);
+    lv_obj_set_style_text_color(rot_icon_label_, xz_accent, 0);
+    lv_obj_center(rot_icon_label_);
     lv_obj_add_flag(rot_btn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(rot_btn, [](lv_event_t* e) {
         (void)e;
@@ -852,8 +853,8 @@ void LcdDisplay::SetupUI_Theme2() {
     lv_obj_set_flex_grow(content_, 1);
     lv_obj_set_style_pad_all(content_, lvgl_theme->spacing(4), 0);
     lv_obj_set_style_border_width(content_, 0, 0);
-    lv_obj_set_style_bg_color(content_, lvgl_theme->chat_background_color(),
-                              0);  // Background for chat area
+    lv_obj_set_style_bg_color(content_, xz_bg, 0);  // Background for chat area matches theme
+    lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
 
     // Enable touch scrolling for chat content
     lv_obj_add_flag(content_, LV_OBJ_FLAG_SCROLLABLE);
@@ -1213,8 +1214,11 @@ void LcdDisplay::SetupUI_Theme1() {
     auto icon_font = lvgl_theme->icon_font()->font();
     auto large_icon_font = lvgl_theme->large_icon_font()->font();
 
+    const auto* synced = GetCurrentSyncedTheme();
     const auto* synced_bg = GetCurrentSyncedBg();
     lv_color_t xz_bg = (synced_bg) ? lv_color_hex(synced_bg->bg_color) : lvgl_theme->background_color();
+    lv_color_t xz_border = (synced_bg) ? lv_color_hex(synced_bg->border_color) : lvgl_theme->border_color();
+    lv_color_t xz_accent = (synced) ? lv_color_hex(synced->accent_color) : lv_color_hex(0x63DDF2);
 
     auto screen = lv_screen_active();
     lv_obj_set_style_text_font(screen, text_font, 0);
@@ -1258,18 +1262,20 @@ void LcdDisplay::SetupUI_Theme1() {
     lv_obj_align(preview_image_, LV_ALIGN_CENTER, 0, 0);
     lv_obj_add_flag(preview_image_, LV_OBJ_FLAG_HIDDEN);
 
-    /* Layer 1: Top bar - for status icons */
+    /* Layer 1: Top bar - for status icons (matches Nova OS C_BG & C_BORDER) */
     top_bar_ = lv_obj_create(screen);
     lv_obj_set_size(top_bar_, lv_pct(100), LV_SIZE_CONTENT);
     lv_obj_set_style_radius(top_bar_, 0, 0);
-    lv_obj_set_style_bg_opa(top_bar_, LV_OPA_TRANSP, 0);  // Transparent to let cyber grid show
-    lv_obj_set_style_bg_color(top_bar_, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_border_width(top_bar_, 0, 0);
+    lv_obj_set_style_bg_opa(top_bar_, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(top_bar_, xz_bg, 0);
+    lv_obj_set_style_border_side(top_bar_, LV_BORDER_SIDE_BOTTOM, 0);
+    lv_obj_set_style_border_color(top_bar_, xz_border, 0);
+    lv_obj_set_style_border_width(top_bar_, 1, 0);
     lv_obj_set_style_pad_all(top_bar_, 0, 0);
-    lv_obj_set_style_pad_top(top_bar_, lvgl_theme->spacing(2), 0);
-    lv_obj_set_style_pad_bottom(top_bar_, lvgl_theme->spacing(2), 0);
-    lv_obj_set_style_pad_left(top_bar_, lvgl_theme->spacing(8), 0);
-    lv_obj_set_style_pad_right(top_bar_, lvgl_theme->spacing(8), 0);
+    lv_obj_set_style_pad_top(top_bar_, 3, 0);
+    lv_obj_set_style_pad_bottom(top_bar_, 3, 0);
+    lv_obj_set_style_pad_left(top_bar_, 6, 0);
+    lv_obj_set_style_pad_right(top_bar_, 6, 0);
     lv_obj_set_flex_flow(top_bar_, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(top_bar_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
@@ -1291,11 +1297,11 @@ void LcdDisplay::SetupUI_Theme1() {
     lv_obj_set_style_bg_opa(rot_btn, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(rot_btn, 0, 0);
     lv_obj_set_style_pad_all(rot_btn, 0, 0);
-    lv_obj_t* rot_icon = lv_label_create(rot_btn);
-    lv_label_set_text(rot_icon, MATERIAL_SYMBOLS_REFRESH);
-    lv_obj_set_style_text_font(rot_icon, icon_font, 0);
-    lv_obj_set_style_text_color(rot_icon, lv_color_hex(0x00E5FF), 0);
-    lv_obj_center(rot_icon);
+    rot_icon_label_ = lv_label_create(rot_btn);
+    lv_label_set_text(rot_icon_label_, MATERIAL_SYMBOLS_REFRESH);
+    lv_obj_set_style_text_font(rot_icon_label_, icon_font, 0);
+    lv_obj_set_style_text_color(rot_icon_label_, xz_accent, 0);
+    lv_obj_center(rot_icon_label_);
     lv_obj_add_flag(rot_btn, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(rot_btn, [](lv_event_t* e) {
         (void)e;
@@ -1831,9 +1837,8 @@ void LcdDisplay::CreateControlCenter() {
             auto* d = static_cast<EventData*>(lv_event_get_user_data(e));
             auto th = LvglThemeManager::GetInstance().GetTheme(d->name);
             if (th) {
+                SyncThemeGlobal(d->name);
                 d->display->SetTheme(th);
-                Settings s("display", true);
-                s.SetString("theme", d->name);
                 d->display->ShowNotification(std::string("Theme: ") + d->name);
             }
         }, LV_EVENT_CLICKED, ed);
@@ -2591,12 +2596,19 @@ void LcdDisplay::CreateBottomNav() {
     auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
     auto icon_font = lvgl_theme ? lvgl_theme->icon_font()->font() : &BUILTIN_ICON_FONT;
 
+    const auto* synced = GetCurrentSyncedTheme();
+    const auto* synced_bg = GetCurrentSyncedBg();
+    lv_color_t xz_bg = (synced_bg) ? lv_color_hex(synced_bg->bg_color) : (lvgl_theme ? lvgl_theme->background_color() : lv_color_hex(0x0B1220));
+    lv_color_t xz_border = (synced_bg) ? lv_color_hex(synced_bg->border_color) : (lvgl_theme ? lvgl_theme->border_color() : lv_color_hex(0x2B3B52));
+    lv_color_t xz_accent = (synced) ? lv_color_hex(synced->accent_color) : lv_color_hex(0x63DDF2);
+    lv_color_t xz_muted = lv_color_hex(0x91A0B5);
+
     xiaozhi_bottom_nav_ = lv_obj_create(top_layer);
     lv_obj_set_size(xiaozhi_bottom_nav_, width_, 30);
     lv_obj_align(xiaozhi_bottom_nav_, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_bg_color(xiaozhi_bottom_nav_, lv_color_hex(0x0A0F1D), 0);
+    lv_obj_set_style_bg_color(xiaozhi_bottom_nav_, xz_bg, 0);
     lv_obj_set_style_bg_opa(xiaozhi_bottom_nav_, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(xiaozhi_bottom_nav_, lv_color_hex(0x1E293B), 0);
+    lv_obj_set_style_border_color(xiaozhi_bottom_nav_, xz_border, 0);
     lv_obj_set_style_border_side(xiaozhi_bottom_nav_, LV_BORDER_SIDE_TOP, 0);
     lv_obj_set_style_border_width(xiaozhi_bottom_nav_, 1, 0);
     lv_obj_set_style_radius(xiaozhi_bottom_nav_, 0, 0);
@@ -2613,14 +2625,14 @@ void LcdDisplay::CreateBottomNav() {
     lv_obj_set_height(back_btn, 26);
     lv_obj_set_flex_grow(back_btn, 1);
     lv_obj_set_style_radius(back_btn, 6, 0);
-    lv_obj_set_style_bg_color(back_btn, lv_color_hex(0x0A0F1D), 0);
+    lv_obj_set_style_bg_color(back_btn, xz_bg, 0);
     lv_obj_set_style_border_width(back_btn, 0, 0);
     lv_obj_set_style_pad_all(back_btn, 0, 0);
     lv_obj_set_style_shadow_width(back_btn, 0, 0);
     lv_obj_t* back_lbl = lv_label_create(back_btn);
     lv_label_set_text(back_lbl, MATERIAL_SYMBOLS_ARROW_BACK);
     lv_obj_set_style_text_font(back_lbl, icon_font, 0);
-    lv_obj_set_style_text_color(back_lbl, lv_color_hex(0x94A3B8), 0);
+    lv_obj_set_style_text_color(back_lbl, xz_muted, 0);
     lv_obj_center(back_lbl);
     lv_obj_add_event_cb(back_btn, [](lv_event_t* e) {
         auto display = static_cast<LcdDisplay*>(lv_event_get_user_data(e));
@@ -2653,14 +2665,14 @@ void LcdDisplay::CreateBottomNav() {
     lv_obj_set_height(home_btn, 26);
     lv_obj_set_flex_grow(home_btn, 1);
     lv_obj_set_style_radius(home_btn, 6, 0);
-    lv_obj_set_style_bg_color(home_btn, lv_color_hex(0x0A0F1D), 0);
+    lv_obj_set_style_bg_color(home_btn, xz_bg, 0);
     lv_obj_set_style_border_width(home_btn, 0, 0);
     lv_obj_set_style_pad_all(home_btn, 0, 0);
     lv_obj_set_style_shadow_width(home_btn, 0, 0);
     lv_obj_t* home_lbl = lv_label_create(home_btn);
     lv_label_set_text(home_lbl, MATERIAL_SYMBOLS_HOME);
     lv_obj_set_style_text_font(home_lbl, icon_font, 0);
-    lv_obj_set_style_text_color(home_lbl, lv_color_hex(0x38BDF8), 0);
+    lv_obj_set_style_text_color(home_lbl, xz_accent, 0);
     lv_obj_center(home_lbl);
     lv_obj_add_event_cb(home_btn, [](lv_event_t* e) {
         if (YouTubeAudioPoller::GetInstance().IsPlaying()) {
@@ -2680,7 +2692,7 @@ void LcdDisplay::CreateBottomNav() {
     lv_obj_set_height(recent_btn, 26);
     lv_obj_set_flex_grow(recent_btn, 1);
     lv_obj_set_style_radius(recent_btn, 6, 0);
-    lv_obj_set_style_bg_color(recent_btn, lv_color_hex(0x0A0F1D), 0);
+    lv_obj_set_style_bg_color(recent_btn, xz_bg, 0);
     lv_obj_set_style_border_width(recent_btn, 0, 0);
     lv_obj_set_style_pad_all(recent_btn, 0, 0);
     lv_obj_set_style_shadow_width(recent_btn, 0, 0);
@@ -2691,7 +2703,7 @@ void LcdDisplay::CreateBottomNav() {
     lv_obj_clear_flag(sq_shape, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
     lv_obj_set_style_radius(sq_shape, 3, 0);
     lv_obj_set_style_bg_opa(sq_shape, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_color(sq_shape, lv_color_hex(0x94A3B8), 0);
+    lv_obj_set_style_border_color(sq_shape, xz_muted, 0);
     lv_obj_set_style_border_width(sq_shape, 2, 0);
     lv_obj_set_style_pad_all(sq_shape, 0, 0);
     lv_obj_set_style_shadow_width(sq_shape, 0, 0);
@@ -2771,15 +2783,6 @@ bool LcdDisplay::SetUiThemeId(int theme_id) {
     Settings settings("display", true);
     settings.SetInt("ui_theme", ui_theme_id_);
 
-    // If switching to Theme 2 and current theme is default dark, switch to white/wechat to match reference image
-    if (ui_theme_id_ == 2 && current_theme_ != nullptr && strcmp(current_theme_->name().c_str(), "dark") == 0) {
-        auto wechat_theme = LvglThemeManager::GetInstance().GetTheme("white");
-        if (wechat_theme != nullptr) {
-            current_theme_ = wechat_theme;
-            settings.SetString("theme", "white");
-        }
-    }
-
     SetupUI();
     UpdateStatusBar(true);
     SetTheme(current_theme_);
@@ -2834,6 +2837,7 @@ void LcdDisplay::DestroyUI() {
     side_bar_ = nullptr;
     container_ = nullptr;
     top_bar_ = nullptr;
+    rot_icon_label_ = nullptr;
     content_ = nullptr;
     network_label_ = nullptr;
     mute_label_ = nullptr;
@@ -4077,10 +4081,12 @@ void LcdDisplay::SetTheme(Theme* theme) {
         lv_obj_set_style_text_font(network_label_, icon_font, 0);
     }
 
+    const auto* synced = GetCurrentSyncedTheme();
     const auto* synced_bg = GetCurrentSyncedBg();
     lv_color_t xz_bg = (synced_bg) ? lv_color_hex(synced_bg->bg_color) : lvgl_theme->background_color();
     lv_color_t xz_panel = (synced_bg) ? lv_color_hex(synced_bg->panel_color) : lvgl_theme->background_color();
     lv_color_t xz_border = (synced_bg) ? lv_color_hex(synced_bg->border_color) : lvgl_theme->border_color();
+    lv_color_t xz_accent = (synced) ? lv_color_hex(synced->accent_color) : lv_color_hex(0x63DDF2);
 
     // Set parent text color and background
     lv_obj_set_style_text_font(screen, text_font, 0);
@@ -4098,15 +4104,17 @@ void LcdDisplay::SetTheme(Theme* theme) {
         }
     }
 
-    // Update top bar styling based on UI theme
+    // Update top bar styling based on UI theme (matches Nova OS C_BG & C_BORDER)
     if (top_bar_ != nullptr) {
-        if (ui_theme_id_ == 2) {
-            lv_obj_set_style_bg_opa(top_bar_, LV_OPA_COVER, 0);
-            lv_obj_set_style_bg_color(top_bar_, xz_panel, 0);
-            lv_obj_set_style_border_color(top_bar_, xz_border, 0);
-        } else {
-            lv_obj_set_style_bg_opa(top_bar_, LV_OPA_TRANSP, 0);
-        }
+        lv_obj_set_style_bg_opa(top_bar_, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(top_bar_, xz_bg, 0);
+        lv_obj_set_style_border_side(top_bar_, LV_BORDER_SIDE_BOTTOM, 0);
+        lv_obj_set_style_border_color(top_bar_, xz_border, 0);
+        lv_obj_set_style_border_width(top_bar_, 1, 0);
+    }
+
+    if (rot_icon_label_ != nullptr) {
+        lv_obj_set_style_text_color(rot_icon_label_, xz_accent, 0);
     }
 
     // Update status bar elements
@@ -4127,7 +4135,7 @@ void LcdDisplay::SetTheme(Theme* theme) {
     if (ui_theme_id_ == 2) {
         // Theme 2: WeChat Chat Bubble UI - dynamically adapt content background & existing bubbles
         if (content_ != nullptr) {
-            lv_obj_set_style_bg_color(content_, lvgl_theme->chat_background_color(), 0);
+            lv_obj_set_style_bg_color(content_, xz_bg, 0);
             lv_obj_set_style_bg_opa(content_, LV_OPA_COVER, 0);
 
             // Iterate through all children of content (message containers or bubbles)
@@ -4219,6 +4227,9 @@ void LcdDisplay::SetTheme(Theme* theme) {
             lv_obj_set_style_text_color(bottom_bar_, lvgl_theme->text_color(), 0);
         }
     }
+
+    // Recreate/update bottom navigation bar so it always matches active theme and background
+    CreateBottomNav();
 
     // Update low battery popup
     lv_obj_set_style_bg_color(low_battery_popup_, lvgl_theme->low_battery_color(), 0);
