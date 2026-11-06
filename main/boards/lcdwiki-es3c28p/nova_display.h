@@ -171,6 +171,10 @@ public:
     void ApplyBackground(const std::string& bg_id, bool persist = true);
     std::string GetCurrentBackgroundId() const;
 
+    void ApplyTextColor(const std::string& text_color_id, bool persist = true);
+    std::string GetCurrentTextColorId() const;
+    void UpdateResolvedTextColor();
+
     void ShowRgbMixerModal();
     void CloseRgbMixerModal();
     void UpdateRgbMixerPreview();
@@ -684,6 +688,7 @@ private:
     int display_scroll_y_ = 0;
     int display_pal_scroll_x_ = 0;
     int display_bg_scroll_x_ = 0;
+    int display_tc_scroll_x_ = 0;
 
     // --- RGB Mixer Modal State ---
     lv_obj_t* rgb_modal_ = nullptr;

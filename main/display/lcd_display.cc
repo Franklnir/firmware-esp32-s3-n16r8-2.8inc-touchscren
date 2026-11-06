@@ -4088,9 +4088,15 @@ void LcdDisplay::SetTheme(Theme* theme) {
     lv_color_t xz_border = (synced_bg) ? lv_color_hex(synced_bg->border_color) : lvgl_theme->border_color();
     lv_color_t xz_accent = (synced) ? lv_color_hex(synced->accent_color) : lv_color_hex(0x63DDF2);
 
+    uint32_t eff_text = 0xF1F5FA;
+    uint32_t eff_muted = 0x91A0B5;
+    ResolveEffectiveTextColor(lv_color_to_int(xz_bg), eff_text, eff_muted);
+    lv_color_t xz_text = lv_color_hex(eff_text);
+    lv_color_t xz_muted = lv_color_hex(eff_muted);
+
     // Set parent text color and background
     lv_obj_set_style_text_font(screen, text_font, 0);
-    lv_obj_set_style_text_color(screen, lvgl_theme->text_color(), 0);
+    lv_obj_set_style_text_color(screen, xz_text, 0);
     lv_obj_set_style_bg_color(screen, xz_bg, 0);
 
     // Set background image or solid color
@@ -4122,15 +4128,15 @@ void LcdDisplay::SetTheme(Theme* theme) {
     int bg_lum = (int)(0.299f * ((bg_rgb >> 16) & 0xFF) + 0.587f * ((bg_rgb >> 8) & 0xFF) + 0.114f * (bg_rgb & 0xFF));
     bool is_light_theme = (bg_lum > 140);
 
-    lv_obj_set_style_text_color(network_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(status_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(notification_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(mute_label_, lvgl_theme->text_color(), 0);
-    lv_obj_set_style_text_color(battery_label_, is_light_theme ? lv_color_hex(0x475569) : lvgl_theme->text_color(), 0);
+    lv_obj_set_style_text_color(network_label_, xz_text, 0);
+    lv_obj_set_style_text_color(status_label_, xz_text, 0);
+    lv_obj_set_style_text_color(notification_label_, xz_text, 0);
+    lv_obj_set_style_text_color(mute_label_, xz_text, 0);
+    lv_obj_set_style_text_color(battery_label_, is_light_theme ? lv_color_hex(0x475569) : xz_muted, 0);
     if (battery_pct_label_ != nullptr) {
-        lv_obj_set_style_text_color(battery_pct_label_, is_light_theme ? lv_color_hex(0x475569) : lv_color_white(), 0);
+        lv_obj_set_style_text_color(battery_pct_label_, is_light_theme ? lv_color_hex(0x475569) : xz_text, 0);
     }
-    lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
+    lv_obj_set_style_text_color(emoji_label_, xz_text, 0);
 
     if (ui_theme_id_ == 2) {
         // Theme 2: WeChat Chat Bubble UI - dynamically adapt content background & existing bubbles
@@ -4213,18 +4219,18 @@ void LcdDisplay::SetTheme(Theme* theme) {
     } else {
         // Theme 1: Simple UI mode - just update the main chat message
         if (chat_message_label_ != nullptr) {
-            lv_obj_set_style_text_color(chat_message_label_, lvgl_theme->text_color(), 0);
+            lv_obj_set_style_text_color(chat_message_label_, xz_text, 0);
         }
 
         if (emoji_label_ != nullptr) {
-            lv_obj_set_style_text_color(emoji_label_, lvgl_theme->text_color(), 0);
+            lv_obj_set_style_text_color(emoji_label_, xz_text, 0);
         }
 
         // Update bottom bar background color with 50% opacity and text color
         if (bottom_bar_ != nullptr && ui_theme_id_ != 2) {
             lv_obj_set_style_bg_opa(bottom_bar_, LV_OPA_50, 0);
-            lv_obj_set_style_bg_color(bottom_bar_, lvgl_theme->background_color(), 0);
-            lv_obj_set_style_text_color(bottom_bar_, lvgl_theme->text_color(), 0);
+            lv_obj_set_style_bg_color(bottom_bar_, xz_bg, 0);
+            lv_obj_set_style_text_color(bottom_bar_, xz_text, 0);
         }
     }
 

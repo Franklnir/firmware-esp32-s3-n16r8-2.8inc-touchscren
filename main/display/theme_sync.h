@@ -303,3 +303,94 @@ inline void SyncBgCustom(uint32_t bg_hex) {
     chr_s.SetInt("card_border", (int)custom.border_color);
 }
 
+// ----------------------------------------------------------------------------
+// Text Color Synchronization System
+// ----------------------------------------------------------------------------
+struct TextColorSyncInfo {
+    const char* id;
+    const char* display_name;
+    uint32_t swatch_color;   // Warna terang pada dot palet agar terlihat jelas
+    uint32_t text_color;     // Warna teks utama (0 untuk auto)
+    uint32_t muted_color;    // Warna teks sekunder / muted
+};
+
+inline const TextColorSyncInfo* GetTextColorTable(size_t* count = nullptr) {
+    static const TextColorSyncInfo kTextColorTable[] = {
+        // 1. Otomatis: Cerdas mendeteksi kecerahan background
+        { "auto",    "Otomatis (Adaptif Kontras)", 0x38BDF8, 0x000000, 0x000000 },
+        // 2. Putih Bersih
+        { "white",   "Putih Bersih (Ultra White)", 0xFFFFFF, 0xFFFFFF, 0xCBD5E1 },
+        // 3. Hitam Pekat
+        { "black",   "Hitam Pekat (Deep Black)",   0x0F172A, 0x0F172A, 0x475569 },
+        // 4. Kuning Stabilo
+        { "yellow",  "Kuning Stabilo (Neon)",      0xFAFF00, 0xFAFF00, 0xD4D700 },
+        // 5. Cyan Laser
+        { "cyan",    "Cyan Laser (High Tech)",     0x00FFFF, 0x00FFFF, 0x38BDF8 },
+        // 6. Hijau Matrix
+        { "green",   "Hijau Matrix (Neon Green)",  0x39FF14, 0x39FF14, 0x22C55E },
+        // 7. Oranye Sunset
+        { "orange",  "Oranye Sunset (Vibrant)",    0xFF9900, 0xFF9900, 0xFB923C },
+        // 8. Merah Muda
+        { "pink",    "Merah Muda (Hot Pink)",      0xFF2A85, 0xFF2A85, 0xF472B6 },
+        // 9. Hijau Mint
+        { "mint",    "Hijau Mint (Pastel)",        0x7DE0B5, 0x7DE0B5, 0x5EEAD4 },
+        // 10. Emas Amber
+        { "amber",   "Emas Amber (Hangat)",        0xFFC477, 0xFFC477, 0xF59E0B }
+    };
+    if (count) *count = sizeof(kTextColorTable) / sizeof(kTextColorTable[0]);
+    return kTextColorTable;
+}
+
+inline const TextColorSyncInfo* FindTextColorById(const std::string& id) {
+    size_t count = 0;
+    const auto* table = GetTextColorTable(&count);
+    for (size_t i = 0; i < count; ++i) {
+        if (id == table[i].id) return &table[i];
+    }
+    return &table[0]; // default: auto
+}
+
+inline const TextColorSyncInfo* GetCurrentSyncedTextColor() {
+    Settings nova_s("nova", true);
+    std::string tc_id = nova_s.GetString("text_color_id", "");
+    if (!tc_id.empty()) {
+        return FindTextColorById(tc_id);
+    }
+    Settings disp_s("display", true);
+    tc_id = disp_s.GetString("text_color_id", "");
+    if (!tc_id.empty()) {
+        return FindTextColorById(tc_id);
+    }
+    return FindTextColorById("auto");
+}
+
+inline void SyncTextColorGlobal(const std::string& tc_id) {
+    const auto* match = FindTextColorById(tc_id);
+    Settings nova_s("nova", true);
+    nova_s.SetString("text_color_id", match->id);
+    Settings disp_s("display", true);
+    disp_s.SetString("text_color_id", match->id);
+}
+
+inline void ResolveEffectiveTextColor(uint32_t bg_hex, uint32_t& out_text, uint32_t& out_muted) {
+    const auto* tc = GetCurrentSyncedTextColor();
+    if (tc && strcmp(tc->id, "auto") != 0) {
+        out_text = tc->text_color;
+        out_muted = tc->muted_color;
+        return;
+    }
+    // Auto contrast based on luminance
+    int r = (bg_hex >> 16) & 0xFF;
+    int g = (bg_hex >> 8) & 0xFF;
+    int b = bg_hex & 0xFF;
+    int lum = (int)(0.299f * r + 0.587f * g + 0.114f * b);
+    if (lum > 140) {
+        out_text = 0x0F172A; // Deep dark slate (black)
+        out_muted = 0x475569; // Dark gray
+    } else {
+        out_text = 0xF1F5FA; // Crisp white
+        out_muted = 0x91A0B5; // Cool gray
+    }
+}
+
+
