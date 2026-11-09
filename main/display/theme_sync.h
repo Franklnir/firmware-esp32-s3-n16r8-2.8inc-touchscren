@@ -304,7 +304,112 @@ inline void SyncBgCustom(uint32_t bg_hex) {
 }
 
 // ----------------------------------------------------------------------------
-// Text Color Synchronization System
+// Contrast, Sharpness & Text Weight System
+// ----------------------------------------------------------------------------
+inline int GetCurrentContrastLevel() {
+    Settings nova_s("nova", true);
+    return nova_s.GetInt("contrast", 1); // 0: Lembut, 1: Normal, 2: Tinggi, 3: Ekstrem
+}
+
+inline void SetCurrentContrastLevel(int level) {
+    Settings nova_s("nova", true);
+    nova_s.SetInt("contrast", level);
+}
+
+inline int GetCurrentSharpnessLevel() {
+    Settings nova_s("nova", true);
+    return nova_s.GetInt("sharpness", 1); // 0: Halus, 1: Standar, 2: Tajam, 3: Ekstrem
+}
+
+inline void SetCurrentSharpnessLevel(int level) {
+    Settings nova_s("nova", true);
+    nova_s.SetInt("sharpness", level);
+}
+
+inline int GetCurrentTextWeightLevel() {
+    Settings nova_s("nova", true);
+    return nova_s.GetInt("text_weight", 0); // 0: Normal, 1: Sedang, 2: Tebal, 3: Ekstra
+}
+
+inline void SetCurrentTextWeightLevel(int level) {
+    Settings nova_s("nova", true);
+    nova_s.SetInt("text_weight", level);
+}
+
+inline void ApplyContrastToThemeColors(uint32_t bg_hex, uint32_t base_panel, uint32_t base_panel2, uint32_t base_border,
+                                       int contrast_level,
+                                       uint32_t& out_bg, uint32_t& out_panel, uint32_t& out_panel2, uint32_t& out_border) {
+    int r = (bg_hex >> 16) & 0xFF;
+    int g = (bg_hex >> 8) & 0xFF;
+    int b = bg_hex & 0xFF;
+
+    if (contrast_level == 0) {
+        // Lembut / Soft (Subdued contrast)
+        out_bg = bg_hex;
+        out_panel = base_panel;
+        out_panel2 = base_panel2;
+        out_border = base_border;
+    } else if (contrast_level == 1) {
+        // Normal / Standar
+        out_bg = bg_hex;
+        out_panel = base_panel;
+        out_panel2 = base_panel2;
+        out_border = base_border;
+    } else if (contrast_level == 2) {
+        // Tinggi / High Contrast: 30% deeper background, brighter cards and borders
+        int nr = (r * 65) / 100;
+        int ng = (g * 65) / 100;
+        int nb = (b * 65) / 100;
+        out_bg = ((uint32_t)nr << 16) | ((uint32_t)ng << 8) | (uint32_t)nb;
+        out_panel = ElevateColor(base_panel, 14, 16, 20);
+        out_panel2 = ElevateColor(base_panel2, 22, 26, 32);
+        out_border = ElevateColor(base_border, 32, 38, 48);
+    } else {
+        // 3: Ekstrem / Ultra OLED Contrast: Pitch black 0x000000 background, crisp sharp cards and borders
+        out_bg = 0x000000;
+        out_panel = ElevateColor(base_panel, 22, 26, 32);
+        out_panel2 = ElevateColor(base_panel2, 34, 40, 48);
+        out_border = ElevateColor(base_border, 50, 60, 72);
+    }
+}
+
+inline uint32_t ApplySharpnessToAccent(uint32_t accent_hex, int sharpness_level) {
+    int r = (accent_hex >> 16) & 0xFF;
+    int g = (accent_hex >> 8) & 0xFF;
+    int b = accent_hex & 0xFF;
+
+    if (sharpness_level == 0) {
+        // Halus / Pastel: slightly softer pastel tone
+        int avg = (r + g + b) / 3;
+        int nr = (r * 75 + avg * 25) / 100;
+        int ng = (g * 75 + avg * 25) / 100;
+        int nb = (b * 75 + avg * 25) / 100;
+        return ((uint32_t)nr << 16) | ((uint32_t)ng << 8) | (uint32_t)nb;
+    } else if (sharpness_level == 1) {
+        // Standar
+        return accent_hex;
+    } else if (sharpness_level == 2) {
+        // Tajam (Sharp / Neon Boost): boost primary channels, increase vibrant punch
+        int max_c = std::max({r, g, b});
+        int min_c = std::min({r, g, b});
+        int nr = (r > min_c) ? std::min(255, (int)(r * 1.15f)) : (int)(r * 0.85f);
+        int ng = (g > min_c) ? std::min(255, (int)(g * 1.15f)) : (int)(g * 0.85f);
+        int nb = (b > min_c) ? std::min(255, (int)(b * 1.15f)) : (int)(b * 0.85f);
+        if (max_c > 0 && nr == 0 && ng == 0 && nb == 0) return accent_hex;
+        return ((uint32_t)nr << 16) | ((uint32_t)ng << 8) | (uint32_t)nb;
+    } else {
+        // Ekstrem (Ultra Sharp / Max Saturation)
+        int max_c = std::max({r, g, b});
+        int min_c = std::min({r, g, b});
+        int nr = (r == max_c) ? 255 : ((r > min_c) ? std::min(255, (int)(r * 1.3f)) : (int)(r * 0.7f));
+        int ng = (g == max_c) ? 255 : ((g > min_c) ? std::min(255, (int)(g * 1.3f)) : (int)(g * 0.7f));
+        int nb = (b == max_c) ? 255 : ((b > min_c) ? std::min(255, (int)(b * 1.3f)) : (int)(b * 0.7f));
+        return ((uint32_t)nr << 16) | ((uint32_t)ng << 8) | (uint32_t)nb;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Text Color Synchronization System (Expanded Full Spectrum Palette)
 // ----------------------------------------------------------------------------
 struct TextColorSyncInfo {
     const char* id;
@@ -314,34 +419,87 @@ struct TextColorSyncInfo {
     uint32_t muted_color;    // Warna teks sekunder / muted
 };
 
+inline TextColorSyncInfo MakeCustomTextColor(uint32_t text_hex) {
+    TextColorSyncInfo info;
+    info.id = "custom";
+    info.display_name = "Kustom RGB Teks";
+    info.swatch_color = text_hex;
+    info.text_color   = text_hex;
+    int r = (text_hex >> 16) & 0xFF;
+    int g = (text_hex >> 8) & 0xFF;
+    int b = text_hex & 0xFF;
+    int mr = (r * 70) / 100;
+    int mg = (g * 70) / 100;
+    int mb = (b * 70) / 100;
+    info.muted_color = ((uint32_t)mr << 16) | ((uint32_t)mg << 8) | (uint32_t)mb;
+    return info;
+}
+
 inline const TextColorSyncInfo* GetTextColorTable(size_t* count = nullptr) {
     static const TextColorSyncInfo kTextColorTable[] = {
-        // 1. Otomatis: Cerdas mendeteksi kecerahan background
-        { "auto",    "Otomatis (Adaptif Kontras)", 0x38BDF8, 0x000000, 0x000000 },
-        // 2. Putih Bersih
-        { "white",   "Putih Bersih (Ultra White)", 0xFFFFFF, 0xFFFFFF, 0xCBD5E1 },
-        // 3. Hitam Pekat
-        { "black",   "Hitam Pekat (Deep Black)",   0x0F172A, 0x0F172A, 0x475569 },
-        // 4. Kuning Stabilo
-        { "yellow",  "Kuning Stabilo (Neon)",      0xFAFF00, 0xFAFF00, 0xD4D700 },
-        // 5. Cyan Laser
-        { "cyan",    "Cyan Laser (High Tech)",     0x00FFFF, 0x00FFFF, 0x38BDF8 },
-        // 6. Hijau Matrix
-        { "green",   "Hijau Matrix (Neon Green)",  0x39FF14, 0x39FF14, 0x22C55E },
-        // 7. Oranye Sunset
-        { "orange",  "Oranye Sunset (Vibrant)",    0xFF9900, 0xFF9900, 0xFB923C },
-        // 8. Merah Muda
-        { "pink",    "Merah Muda (Hot Pink)",      0xFF2A85, 0xFF2A85, 0xF472B6 },
-        // 9. Hijau Mint
-        { "mint",    "Hijau Mint (Pastel)",        0x7DE0B5, 0x7DE0B5, 0x5EEAD4 },
-        // 10. Emas Amber
-        { "amber",   "Emas Amber (Hangat)",        0xFFC477, 0xFFC477, 0xF59E0B }
+        // --- 1. ADAPTIF ---
+        { "auto",        "Otomatis (Adaptif Kontras)",  0x38BDF8, 0x000000, 0x000000 },
+
+        // --- 2. PUTIH & MONOKROM ---
+        { "white",       "Putih Kristal (Ultra White)", 0xFFFFFF, 0xFFFFFF, 0xCBD5E1 },
+        { "chalk",       "Putih Kapur (Soft White)",    0xF1F5F9, 0xF1F5F9, 0x94A3B8 },
+        { "silver",      "Perak Platinum (Silver)",     0xCBD5E1, 0xCBD5E1, 0x64748B },
+        { "slate",       "Abu-abu Slate (Steel)",       0x94A3B8, 0x94A3B8, 0x475569 },
+        { "black",       "Hitam Pekat (Deep Black)",    0x0F172A, 0x0F172A, 0x475569 },
+
+        // --- 3. KUNING & EMAS ---
+        { "yellow",      "Kuning Stabilo (Neon)",       0xFAFF00, 0xFAFF00, 0xD4D700 },
+        { "gold",        "Emas Murni (Pure Gold)",      0xFACC15, 0xFACC15, 0xCA8A04 },
+        { "amber",       "Emas Amber (Hangat)",         0xF59E0B, 0xF59E0B, 0xD97706 },
+        { "warm_yellow", "Kuning Jagung (Warm)",        0xFDE047, 0xFDE047, 0xEAB308 },
+
+        // --- 4. ORANYE & PERSIS ---
+        { "orange",      "Oranye Sunset (Vibrant)",     0xFF6600, 0xFF6600, 0xEA580C },
+        { "coral",       "Oranye Karang (Coral)",       0xFB923C, 0xFB923C, 0xC2410C },
+        { "peach",       "Peach Manis (Pastel)",        0xFDBA74, 0xFDBA74, 0xF97316 },
+
+        // --- 5. MERAH & PINK ---
+        { "red",         "Merah Neon (Bright Red)",     0xFF1744, 0xFF1744, 0xDC2626 },
+        { "crimson",     "Merah Crimson (Delima)",      0xE11D48, 0xE11D48, 0xBE123C },
+        { "rose",        "Mawar Rose (Soft Pink)",      0xFB7185, 0xFB7185, 0xF43F5E },
+        { "pink",        "Pink Stabilo (Hot Magenta)",  0xFF007F, 0xFF007F, 0xBE185D },
+        { "fuchsia",     "Fuchsia Cyberpunk",           0xD946EF, 0xD946EF, 0xA21CAF },
+
+        // --- 6. UNGU & VIOLET ---
+        { "purple",      "Ungu Neon (Electric)",        0xB000FF, 0xB000FF, 0x7E22CE },
+        { "violet",      "Lembayung Violet",            0x8B5CF6, 0x8B5CF6, 0x6D28D9 },
+        { "indigo",      "Biru Indigo (Deep)",          0x6366F1, 0x6366F1, 0x4338CA },
+        { "lavender",    "Lavender (Pastel)",           0xC4B5FD, 0xC4B5FD, 0x8B5CF6 },
+
+        // --- 7. BIRU & ES ---
+        { "blue",        "Biru Elektrik (Royal Blue)",  0x00D2FF, 0x00D2FF, 0x0284C7 },
+        { "sky",         "Biru Langit (Sky Blue)",      0x38BDF8, 0x38BDF8, 0x0EA5E9 },
+        { "ice",         "Cyan Es Kutub (Ice)",         0x7DD3FC, 0x7DD3FC, 0x38BDF8 },
+        { "ocean",       "Biru Samudra (Deep Ocean)",   0x2563EB, 0x2563EB, 0x1D4ED8 },
+
+        // --- 8. CYAN & TOSKA ---
+        { "cyan",        "Cyan Laser (High Tech)",      0x00FFFF, 0x00FFFF, 0x06B6D4 },
+        { "teal",        "Toska Samudra (Teal)",        0x14B8A6, 0x14B8A6, 0x0F766E },
+        { "aquamarine",  "Aquamarine Tropis",           0x2DD4BF, 0x2DD4BF, 0x0D9488 },
+
+        // --- 9. HIJAU & LIME ---
+        { "green",       "Hijau Matrix (Neon Green)",   0x39FF14, 0x39FF14, 0x16A34A },
+        { "lime",        "Hijau Lemon (Cyber Lime)",    0x84CC16, 0x84CC16, 0x65A30D },
+        { "emerald",     "Hijau Zamrud (Emerald)",      0x10B981, 0x10B981, 0x059669 },
+        { "mint",        "Hijau Mint (Pastel)",         0x7DE0B5, 0x7DE0B5, 0x14B8A6 }
     };
     if (count) *count = sizeof(kTextColorTable) / sizeof(kTextColorTable[0]);
     return kTextColorTable;
 }
 
 inline const TextColorSyncInfo* FindTextColorById(const std::string& id) {
+    static TextColorSyncInfo s_custom_tc_cache;
+    if (id == "custom") {
+        Settings nova_s("nova", true);
+        uint32_t custom_hex = (uint32_t)nova_s.GetInt("custom_tc", 0x38BDF8);
+        s_custom_tc_cache = MakeCustomTextColor(custom_hex);
+        return &s_custom_tc_cache;
+    }
     size_t count = 0;
     const auto* table = GetTextColorTable(&count);
     for (size_t i = 0; i < count; ++i) {
@@ -370,6 +528,14 @@ inline void SyncTextColorGlobal(const std::string& tc_id) {
     nova_s.SetString("text_color_id", match->id);
     Settings disp_s("display", true);
     disp_s.SetString("text_color_id", match->id);
+}
+
+inline void SyncTextColorCustom(uint32_t text_hex) {
+    Settings nova_s("nova", true);
+    nova_s.SetString("text_color_id", "custom");
+    nova_s.SetInt("custom_tc", (int)text_hex);
+    Settings disp_s("display", true);
+    disp_s.SetString("text_color_id", "custom");
 }
 
 inline void ResolveEffectiveTextColor(uint32_t bg_hex, uint32_t& out_text, uint32_t& out_muted) {

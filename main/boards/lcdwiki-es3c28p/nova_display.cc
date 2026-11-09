@@ -104,6 +104,10 @@ NovaDisplay::NovaDisplay(const NovaCallbacks& callbacks)
     language_idx_ = sys.GetInt("lang_idx", 0);
     timezone_idx_ = sys.GetInt("tz_idx", 0);
 
+    contrast_level_ = GetCurrentContrastLevel();
+    sharpness_level_ = GetCurrentSharpnessLevel();
+    text_weight_ = GetCurrentTextWeightLevel();
+
     const auto* synced = GetCurrentSyncedTheme();
     if (synced) {
         ApplyTheme(synced->theme_name, false);
@@ -138,25 +142,36 @@ void NovaDisplay::ApplyTheme(const std::string& theme_name, bool persist) {
     const auto* th = FindThemeByName(theme_name);
     if (!th) return;
 
-    C_CYAN = lv_color_hex(th->accent_color);
+    uint32_t eff_accent = ApplySharpnessToAccent(th->accent_color, sharpness_level_);
+    C_CYAN = lv_color_hex(eff_accent);
 
     // If custom background was selected by user, keep it; otherwise use theme default
     Settings nova_s("nova", true);
     std::string saved_bg = nova_s.GetString("bg_id", "");
+    uint32_t raw_bg = th->bg_color;
+    uint32_t raw_panel = th->panel_color;
+    uint32_t raw_panel2 = th->panel2_color;
+    uint32_t raw_border = th->border_color;
+
     if (!saved_bg.empty()) {
         const auto* bg = FindBgById(saved_bg);
-        C_BG      = lv_color_hex(bg->bg_color);
-        C_PANEL   = lv_color_hex(bg->panel_color);
-        C_PANEL_2 = lv_color_hex(bg->panel2_color);
-        C_BORDER  = lv_color_hex(bg->border_color);
-        C_DARK    = lv_color_hex(bg->bg_color);
-    } else {
-        C_BG      = lv_color_hex(th->bg_color);
-        C_PANEL   = lv_color_hex(th->panel_color);
-        C_PANEL_2 = lv_color_hex(th->panel2_color);
-        C_BORDER  = lv_color_hex(th->border_color);
-        C_DARK    = lv_color_hex(th->bg_color);
+        if (bg) {
+            raw_bg = bg->bg_color;
+            raw_panel = bg->panel_color;
+            raw_panel2 = bg->panel2_color;
+            raw_border = bg->border_color;
+        }
     }
+
+    uint32_t eff_bg, eff_panel, eff_panel2, eff_border;
+    ApplyContrastToThemeColors(raw_bg, raw_panel, raw_panel2, raw_border, contrast_level_,
+                               eff_bg, eff_panel, eff_panel2, eff_border);
+
+    C_BG      = lv_color_hex(eff_bg);
+    C_PANEL   = lv_color_hex(eff_panel);
+    C_PANEL_2 = lv_color_hex(eff_panel2);
+    C_BORDER  = lv_color_hex(eff_border);
+    C_DARK    = lv_color_hex(eff_bg);
 
     if (persist) {
         SyncThemeGlobal(th->theme_name);
@@ -173,11 +188,15 @@ void NovaDisplay::ApplyBackground(const std::string& bg_id, bool persist) {
     const auto* bg = FindBgById(bg_id);
     if (!bg) return;
 
-    C_BG      = lv_color_hex(bg->bg_color);
-    C_PANEL   = lv_color_hex(bg->panel_color);
-    C_PANEL_2 = lv_color_hex(bg->panel2_color);
-    C_BORDER  = lv_color_hex(bg->border_color);
-    C_DARK    = lv_color_hex(bg->bg_color);
+    uint32_t eff_bg, eff_panel, eff_panel2, eff_border;
+    ApplyContrastToThemeColors(bg->bg_color, bg->panel_color, bg->panel2_color, bg->border_color, contrast_level_,
+                               eff_bg, eff_panel, eff_panel2, eff_border);
+
+    C_BG      = lv_color_hex(eff_bg);
+    C_PANEL   = lv_color_hex(eff_panel);
+    C_PANEL_2 = lv_color_hex(eff_panel2);
+    C_BORDER  = lv_color_hex(eff_border);
+    C_DARK    = lv_color_hex(eff_bg);
 
     if (persist) {
         SyncBgGlobal(bg->id);
@@ -187,6 +206,68 @@ void NovaDisplay::ApplyBackground(const std::string& bg_id, bool persist) {
 
     if (current_page_ != PAGE_SPLASH && width_ > 0) {
         BuildCurrentPage();
+    }
+}
+
+void NovaDisplay::ApplyContrast(int contrast, bool persist) {
+    contrast_level_ = contrast;
+    if (persist) {
+        SetCurrentContrastLevel(contrast);
+    }
+    const auto* cur_bg = GetCurrentSyncedBg();
+    if (cur_bg) {
+        ApplyBackground(cur_bg->id, false);
+    } else {
+        ApplyTheme(GetCurrentThemeName(), false);
+    }
+}
+
+int NovaDisplay::GetCurrentContrast() const {
+    return contrast_level_;
+}
+
+void NovaDisplay::ApplySharpness(int sharpness, bool persist) {
+    sharpness_level_ = sharpness;
+    if (persist) {
+        SetCurrentSharpnessLevel(sharpness);
+    }
+    ApplyTheme(GetCurrentThemeName(), false);
+}
+
+int NovaDisplay::GetCurrentSharpness() const {
+    return sharpness_level_;
+}
+
+void NovaDisplay::ApplyTextWeight(int weight, bool persist) {
+    text_weight_ = weight;
+    if (persist) {
+        SetCurrentTextWeightLevel(weight);
+    }
+    if (current_page_ != PAGE_SPLASH && width_ > 0) {
+        BuildCurrentPage();
+    }
+}
+
+int NovaDisplay::GetCurrentTextWeight() const {
+    return text_weight_;
+}
+
+void NovaDisplay::ApplyTextWeightToObj(lv_obj_t* obj, lv_color_t color) {
+    if (!obj) return;
+    if (text_weight_ == 1) { // Sedang / Medium
+        lv_obj_set_style_text_outline_stroke_color(obj, color, LV_PART_MAIN);
+        lv_obj_set_style_text_outline_stroke_width(obj, 1, LV_PART_MAIN);
+        lv_obj_set_style_text_outline_stroke_opa(obj, LV_OPA_60, LV_PART_MAIN);
+    } else if (text_weight_ == 2) { // Tebal / Bold
+        lv_obj_set_style_text_outline_stroke_color(obj, color, LV_PART_MAIN);
+        lv_obj_set_style_text_outline_stroke_width(obj, 1, LV_PART_MAIN);
+        lv_obj_set_style_text_outline_stroke_opa(obj, LV_OPA_COVER, LV_PART_MAIN);
+    } else if (text_weight_ >= 3) { // Ekstra Tebal / Heavy
+        lv_obj_set_style_text_outline_stroke_color(obj, color, LV_PART_MAIN);
+        lv_obj_set_style_text_outline_stroke_width(obj, 2, LV_PART_MAIN);
+        lv_obj_set_style_text_outline_stroke_opa(obj, LV_OPA_COVER, LV_PART_MAIN);
+    } else { // Normal (0)
+        lv_obj_set_style_text_outline_stroke_width(obj, 0, LV_PART_MAIN);
     }
 }
 
@@ -343,6 +424,7 @@ lv_obj_t* NovaDisplay::MakeLabel(lv_obj_t* parent, const char* text,
     lv_obj_set_style_text_font(label, font, LV_PART_MAIN);
     lv_obj_set_style_text_color(label, color, LV_PART_MAIN);
     lv_obj_set_style_text_align(label, align, LV_PART_MAIN);
+    ApplyTextWeightToObj(label, color);
     lv_obj_clear_flag(label, (lv_obj_flag_t)(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
     return label;
 }
@@ -381,6 +463,7 @@ lv_obj_t* NovaDisplay::MakeButton(lv_obj_t* parent, const char* text,
     lv_label_set_text(label, text);
     lv_obj_set_style_text_font(label, font, LV_PART_MAIN);
     lv_obj_set_style_text_color(label, text_color, LV_PART_MAIN);
+    ApplyTextWeightToObj(label, text_color);
     lv_obj_center(label);
     if (callback) {
         lv_obj_add_event_cb(button, callback, LV_EVENT_CLICKED, user_data);
@@ -2043,14 +2126,28 @@ void NovaDisplay::UpdateRgbMixerPreview() {
     }
 }
 
-void NovaDisplay::ShowRgbMixerModal() {
+void NovaDisplay::ShowRgbMixerModal(bool is_text_color) {
     CloseRgbMixerModal();
+    mixer_is_text_ = is_text_color;
 
-    const auto* cur_bg = GetCurrentSyncedBg();
-    if (cur_bg) {
-        mixer_r_ = (cur_bg->bg_color >> 16) & 0xFF;
-        mixer_g_ = (cur_bg->bg_color >> 8) & 0xFF;
-        mixer_b_ = cur_bg->bg_color & 0xFF;
+    if (mixer_is_text_) {
+        const auto* cur_tc = GetCurrentSyncedTextColor();
+        if (cur_tc && strcmp(cur_tc->id, "auto") != 0) {
+            mixer_r_ = (cur_tc->text_color >> 16) & 0xFF;
+            mixer_g_ = (cur_tc->text_color >> 8) & 0xFF;
+            mixer_b_ = cur_tc->text_color & 0xFF;
+        } else {
+            mixer_r_ = (lv_color_to_int(C_TEXT) >> 16) & 0xFF;
+            mixer_g_ = (lv_color_to_int(C_TEXT) >> 8) & 0xFF;
+            mixer_b_ = lv_color_to_int(C_TEXT) & 0xFF;
+        }
+    } else {
+        const auto* cur_bg = GetCurrentSyncedBg();
+        if (cur_bg) {
+            mixer_r_ = (cur_bg->bg_color >> 16) & 0xFF;
+            mixer_g_ = (cur_bg->bg_color >> 8) & 0xFF;
+            mixer_b_ = cur_bg->bg_color & 0xFF;
+        }
     }
 
     lv_obj_t* root = lv_layer_top();
@@ -2070,7 +2167,7 @@ void NovaDisplay::ShowRgbMixerModal() {
     lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
 
     // Title
-    MakeLabel(card, "🎨 CUSTOM RGB MIXER", 12, 8, card_w - 24, 18, FONT_12, C_CYAN);
+    MakeLabel(card, mixer_is_text_ ? "🎨 KUSTOM RGB WARNA TEKS" : "🎨 CUSTOM RGB MIXER (LATAR)", 12, 8, card_w - 24, 18, FONT_12, C_CYAN);
 
     // Preview row
     rgb_preview_box_ = lv_obj_create(card);
@@ -2127,9 +2224,15 @@ void NovaDisplay::ShowRgbMixerModal() {
             auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
             if (!self) return;
             uint32_t custom_hex = ((uint32_t)self->mixer_r_ << 16) | ((uint32_t)self->mixer_g_ << 8) | (uint32_t)self->mixer_b_;
-            SyncBgCustom(custom_hex);
-            self->CloseRgbMixerModal();
-            self->ApplyBackground("custom", true);
+            if (self->mixer_is_text_) {
+                SyncTextColorCustom(custom_hex);
+                self->CloseRgbMixerModal();
+                self->ApplyTextColor("custom", true);
+            } else {
+                SyncBgCustom(custom_hex);
+                self->CloseRgbMixerModal();
+                self->ApplyBackground("custom", true);
+            }
             if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
         }, this);
 
@@ -3164,59 +3267,112 @@ void NovaDisplay::BuildDisplay() {
     MakeHeader(root, "TAMPILAN");
 
     const auto* cur_bg = GetCurrentSyncedBg();
+    const auto* cur_tc = GetCurrentSyncedTextColor();
+    int cur_weight = GetCurrentTextWeight();
+    int cur_contrast = GetCurrentContrast();
+    int cur_sharpness = GetCurrentSharpness();
+
+    auto on_weight_click = [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (!self) return;
+        int w = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        self->ApplyTextWeight(w, true);
+        if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    };
+
+    auto on_contrast_click = [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (!self) return;
+        int c = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        self->ApplyContrast(c, true);
+        if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    };
+
+    auto on_sharpness_click = [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (!self) return;
+        int s = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        self->ApplySharpness(s, true);
+        if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+    };
+
+    auto make_level_button = [&](lv_obj_t* p, const char* label, int x, int y, int w, int h, bool active, lv_event_cb_t cb, int val) {
+        lv_color_t fill = active ? C_CYAN : C_PANEL;
+        lv_color_t border = active ? C_CYAN : C_BORDER;
+        lv_color_t txt_col = active ? C_BG : C_TEXT;
+        lv_obj_t* btn = MakeButton(p, label, x, y, w, h, fill, border, txt_col, FONT_10, cb, this);
+        lv_obj_set_user_data(btn, (void*)(intptr_t)val);
+        if (active) {
+            lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN);
+        }
+        return btn;
+    };
 
     if (width_ > 240) {
         // === RESPONSIVE LANDSCAPE LAYOUT (320x240) ===
-        // Left Column (x=8, w=148): Brightness & Rotation Controls
-        lv_obj_t* card = MakePanel(root, 8, 36, 148, 66, C_PANEL, C_BORDER, 8);
+        // Left Column (x=8, w=146): Brightness & Rotation Controls
+        lv_obj_t* card = MakePanel(root, 8, 36, 146, 66, C_PANEL, C_BORDER, 8);
         MakeLabel(card, "KECERAHAN", 8, 6, 80, 14, FONT_10, C_MUTED);
         char val[24];
         snprintf(val, sizeof(val), "%u / 255", brightness_);
-        brightness_value_label_ = MakeLabel(card, val, 78, 6, 60, 14, FONT_10, C_CYAN, LV_TEXT_ALIGN_RIGHT);
-        MakeBrightnessSlider(card, 8, 26, 132);
+        brightness_value_label_ = MakeLabel(card, val, 76, 6, 60, 14, FONT_10, C_CYAN, LV_TEXT_ALIGN_RIGHT);
+        MakeBrightnessSlider(card, 8, 26, 130);
 
-        MakeButton(root, "REDUP", 8, 106, 46, 26, C_PANEL, C_BORDER, C_TEXT, FONT_10,
+        MakeButton(root, "REDUP", 8, 106, 45, 26, C_PANEL, C_BORDER, C_TEXT, FONT_10,
             [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
                 auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                 if (self) self->ApplyBrightness(55);
             }, this);
 
-        MakeButton(root, "SEDANG", 59, 106, 46, 26, C_PANEL, C_BORDER, C_TEXT, FONT_10,
+        MakeButton(root, "SEDANG", 58, 106, 45, 26, C_PANEL, C_BORDER, C_TEXT, FONT_10,
             [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
                 auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                 if (self) self->ApplyBrightness(145);
             }, this);
 
-        MakeButton(root, "TERANG", 110, 106, 46, 26, C_PANEL, C_BORDER, C_TEXT, FONT_10,
+        MakeButton(root, "TERANG", 108, 106, 46, 26, C_PANEL, C_BORDER, C_TEXT, FONT_10,
             [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
                 auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                 if (self) self->ApplyBrightness(235);
             }, this);
 
-        MakeButton(root, "ROTASI LAYAR 90°", 8, 136, 148, 28, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        MakeButton(root, "ROTASI LAYAR 90°", 8, 136, 146, 28, C_PANEL, C_CYAN, C_CYAN, FONT_10,
             [](lv_event_t* e) {
                 (void)e;
                 Board::GetInstance().RotateDisplay();
             }, nullptr);
 
-        MakeLabel(root, "IPS 320x240 Color Engine", 8, 168, 148, 14, FONT_10, C_MUTED);
+        MakeLabel(root, "IPS Color Engine", 8, 168, 146, 14, FONT_10, C_MUTED);
 
-        // Right Column (x=164, w=148): Color Themes & Background Selection
-        MakeLabel(root, "TEMA AKSEN (10 WARNA)", 164, 36, 148, 14, FONT_10, C_MUTED);
+        // Right Column (x=160, w=152): Vertical Scrollview for all theme & font controls
+        lv_obj_t* right_list = lv_obj_create(root);
+        lv_obj_set_pos(right_list, 158, 36);
+        lv_obj_set_size(right_list, 158, height_ - 68);
+        lv_obj_set_style_bg_opa(right_list, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(right_list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(right_list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(right_list, 120, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(right_list, LV_SCROLLBAR_MODE_ACTIVE);
+        lv_obj_set_scroll_dir(right_list, LV_DIR_VER);
 
-        lv_obj_t* pal_box = lv_obj_create(root);
-        lv_obj_set_pos(pal_box, 164, 50);
-        lv_obj_set_size(pal_box, 148, 30);
+        // 1. Theme Accent Colors
+        MakeLabel(right_list, "TEMA AKSEN (10 WARNA)", 2, 2, 148, 14, FONT_10, C_MUTED);
+        lv_obj_t* pal_box = lv_obj_create(right_list);
+        lv_obj_set_pos(pal_box, 2, 16);
+        lv_obj_set_size(pal_box, 148, 28);
         lv_obj_set_flex_flow(pal_box, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(pal_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_bg_color(pal_box, C_PANEL, 0);
         lv_obj_set_style_border_color(pal_box, C_BORDER, 0);
         lv_obj_set_style_border_width(pal_box, 1, 0);
         lv_obj_set_style_radius(pal_box, 6, 0);
-        lv_obj_set_style_pad_all(pal_box, 3, 0);
+        lv_obj_set_style_pad_all(pal_box, 2, 0);
         lv_obj_set_style_pad_column(pal_box, 4, 0);
         lv_obj_set_scroll_dir(pal_box, LV_DIR_HOR);
         lv_obj_set_scrollbar_mode(pal_box, LV_SCROLLBAR_MODE_OFF);
@@ -3234,7 +3390,6 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(themes[i].border_color), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
-
             lv_obj_set_user_data(dot, (void*)(intptr_t)i);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -3244,19 +3399,16 @@ void NovaDisplay::BuildDisplay() {
                 size_t count = 0;
                 const auto* th_table = GetThemeSyncTable(&count);
                 if (idx >= 0 && idx < (int)count) {
-                    lv_obj_t* target_dot = (lv_obj_t*)lv_event_get_target(e);
-                    lv_obj_t* p_box = lv_obj_get_parent(target_dot);
-                    if (p_box) self->display_pal_scroll_x_ = lv_obj_get_scroll_x(p_box);
                     self->ApplyTheme(th_table[idx].theme_name, true);
                     if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
                 }
             }, LV_EVENT_CLICKED, this);
         }
 
-        MakeLabel(root, "WARNA LATAR (25 PILIHAN)", 164, 82, 148, 14, FONT_10, C_MUTED);
-
-        lv_obj_t* bg_box = lv_obj_create(root);
-        lv_obj_set_pos(bg_box, 164, 96);
+        // 2. Background Colors
+        MakeLabel(right_list, "WARNA LATAR (25 PILIHAN)", 2, 48, 148, 14, FONT_10, C_MUTED);
+        lv_obj_t* bg_box = lv_obj_create(right_list);
+        lv_obj_set_pos(bg_box, 2, 62);
         lv_obj_set_size(bg_box, 148, 28);
         lv_obj_set_flex_flow(bg_box, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(bg_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -3264,7 +3416,7 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_border_color(bg_box, C_BORDER, 0);
         lv_obj_set_style_border_width(bg_box, 1, 0);
         lv_obj_set_style_radius(bg_box, 6, 0);
-        lv_obj_set_style_pad_all(bg_box, 3, 0);
+        lv_obj_set_style_pad_all(bg_box, 2, 0);
         lv_obj_set_style_pad_column(bg_box, 4, 0);
         lv_obj_set_scroll_dir(bg_box, LV_DIR_HOR);
         lv_obj_set_scrollbar_mode(bg_box, LV_SCROLLBAR_MODE_OFF);
@@ -3282,7 +3434,6 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
-
             lv_obj_set_user_data(dot, (void*)(intptr_t)i);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -3292,19 +3443,23 @@ void NovaDisplay::BuildDisplay() {
                 size_t count = 0;
                 const auto* bg_table = GetBackgroundTable(&count);
                 if (idx >= 0 && idx < (int)count) {
-                    lv_obj_t* target_dot = (lv_obj_t*)lv_event_get_target(e);
-                    lv_obj_t* p_box = lv_obj_get_parent(target_dot);
-                    if (p_box) self->display_bg_scroll_x_ = lv_obj_get_scroll_x(p_box);
                     self->ApplyBackground(bg_table[idx].id, true);
                     if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
                 }
             }, LV_EVENT_CLICKED, this);
         }
 
-        MakeLabel(root, "WARNA TEKS (10 PILIHAN)", 164, 128, 148, 14, FONT_10, C_MUTED);
+        MakeButton(right_list, "🎨 RGB LATAR", 2, 94, 148, 22, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+            [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (self) self->ShowRgbMixerModal(false);
+            }, this);
 
-        lv_obj_t* tc_box = lv_obj_create(root);
-        lv_obj_set_pos(tc_box, 164, 142);
+        // 3. Text Colors (Full Palette)
+        MakeLabel(right_list, "WARNA TEKS (31 PILIHAN)", 2, 120, 148, 14, FONT_10, C_MUTED);
+        lv_obj_t* tc_box = lv_obj_create(right_list);
+        lv_obj_set_pos(tc_box, 2, 134);
         lv_obj_set_size(tc_box, 148, 28);
         lv_obj_set_flex_flow(tc_box, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(tc_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -3312,12 +3467,11 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_border_color(tc_box, C_BORDER, 0);
         lv_obj_set_style_border_width(tc_box, 1, 0);
         lv_obj_set_style_radius(tc_box, 6, 0);
-        lv_obj_set_style_pad_all(tc_box, 3, 0);
+        lv_obj_set_style_pad_all(tc_box, 2, 0);
         lv_obj_set_style_pad_column(tc_box, 4, 0);
         lv_obj_set_scroll_dir(tc_box, LV_DIR_HOR);
         lv_obj_set_scrollbar_mode(tc_box, LV_SCROLLBAR_MODE_OFF);
 
-        const auto* cur_tc = GetCurrentSyncedTextColor();
         size_t tc_count = 0;
         const auto* tcs = GetTextColorTable(&tc_count);
         for (size_t i = 0; i < tc_count; ++i) {
@@ -3349,46 +3503,40 @@ void NovaDisplay::BuildDisplay() {
                 size_t count = 0;
                 const auto* tc_table = GetTextColorTable(&count);
                 if (idx >= 0 && idx < (int)count) {
-                    lv_obj_t* target_dot = (lv_obj_t*)lv_event_get_target(e);
-                    lv_obj_t* p_box = lv_obj_get_parent(target_dot);
-                    if (p_box) self->display_tc_scroll_x_ = lv_obj_get_scroll_x(p_box);
                     self->ApplyTextColor(tc_table[idx].id, true);
                     if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
                 }
             }, LV_EVENT_CLICKED, this);
         }
 
-        MakeButton(root, "🎨 ATUR RGB SENDIRI", 164, 174, 148, 22, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        MakeButton(right_list, "🎨 RGB TEKS", 2, 166, 148, 22, C_PANEL, C_CYAN, C_CYAN, FONT_10,
             [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
                 auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
-                if (self) self->ShowRgbMixerModal();
+                if (self) self->ShowRgbMixerModal(true);
             }, this);
 
-        if (cur_tc) {
-            char tc_txt[48];
-            snprintf(tc_txt, sizeof(tc_txt), "Teks: %s", cur_tc->display_name);
-            lv_obj_t* tc_info = MakeLabel(root, tc_txt, 164, 198, 148, 14, FONT_10, C_CYAN);
-            lv_label_set_long_mode(tc_info, LV_LABEL_LONG_DOT);
-        }
+        // 4. Text Weight (Ketebalan Teks)
+        MakeLabel(right_list, "KETEBALAN TEKS", 2, 192, 148, 14, FONT_10, C_MUTED);
+        make_level_button(right_list, "NORM", 2, 206, 35, 22, cur_weight == 0, on_weight_click, 0);
+        make_level_button(right_list, "MDM", 39, 206, 35, 22, cur_weight == 1, on_weight_click, 1);
+        make_level_button(right_list, "BOLD", 76, 206, 36, 22, cur_weight == 2, on_weight_click, 2);
+        make_level_button(right_list, "XTRA", 114, 206, 36, 22, cur_weight == 3, on_weight_click, 3);
 
-        lv_obj_add_event_cb(pal_box, [](lv_event_t* e) {
-            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
-            if (self) self->display_pal_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
-        }, LV_EVENT_SCROLL, this);
-        lv_obj_add_event_cb(bg_box, [](lv_event_t* e) {
-            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
-            if (self) self->display_bg_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
-        }, LV_EVENT_SCROLL, this);
-        lv_obj_add_event_cb(tc_box, [](lv_event_t* e) {
-            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
-            if (self) self->display_tc_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
-        }, LV_EVENT_SCROLL, this);
+        // 5. Contrast (Kontras Tampilan)
+        MakeLabel(right_list, "KONTRAS TAMPILAN", 2, 232, 148, 14, FONT_10, C_MUTED);
+        make_level_button(right_list, "LMBT", 2, 246, 35, 22, cur_contrast == 0, on_contrast_click, 0);
+        make_level_button(right_list, "NORM", 39, 246, 35, 22, cur_contrast == 1, on_contrast_click, 1);
+        make_level_button(right_list, "TNGI", 76, 246, 36, 22, cur_contrast == 2, on_contrast_click, 2);
+        make_level_button(right_list, "EKST", 114, 246, 36, 22, cur_contrast == 3, on_contrast_click, 3);
 
-        lv_obj_update_layout(root);
-        if (display_pal_scroll_x_ > 0) lv_obj_scroll_to_x(pal_box, display_pal_scroll_x_, LV_ANIM_OFF);
-        if (display_bg_scroll_x_ > 0)  lv_obj_scroll_to_x(bg_box, display_bg_scroll_x_, LV_ANIM_OFF);
-        if (display_tc_scroll_x_ > 0)  lv_obj_scroll_to_x(tc_box, display_tc_scroll_x_, LV_ANIM_OFF);
+        // 6. Sharpness (Ketajaman Aksen Tema)
+        MakeLabel(right_list, "KETAJAMAN WARNA", 2, 272, 148, 14, FONT_10, C_MUTED);
+        make_level_button(right_list, "HLUS", 2, 286, 35, 22, cur_sharpness == 0, on_sharpness_click, 0);
+        make_level_button(right_list, "STND", 39, 286, 35, 22, cur_sharpness == 1, on_sharpness_click, 1);
+        make_level_button(right_list, "TAJM", 76, 286, 36, 22, cur_sharpness == 2, on_sharpness_click, 2);
+        make_level_button(right_list, "EKST", 114, 286, 36, 22, cur_sharpness == 3, on_sharpness_click, 3);
+
     } else {
         // === PORTRAIT LAYOUT (240x320) WITH SMOOTH SCROLLING ===
         lv_obj_t* list = lv_obj_create(root);
@@ -3397,7 +3545,7 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_bottom(list, 150, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 180, LV_PART_MAIN);
         lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
@@ -3539,25 +3687,25 @@ void NovaDisplay::BuildDisplay() {
             }, LV_EVENT_CLICKED, this);
         }
 
-        // Custom RGB Mixer Button
-        MakeButton(list, "🎨 ATUR RGB SENDIRI (MIXER)", 12, 284, 216, 30, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        // Custom RGB Mixer Button for Background
+        MakeButton(list, "🎨 ATUR RGB LATAR SENDIRI", 12, 284, 216, 28, C_PANEL, C_CYAN, C_CYAN, FONT_10,
             [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
                 auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
-                if (self) self->ShowRgbMixerModal();
+                if (self) self->ShowRgbMixerModal(false);
             }, this);
 
         if (cur_bg) {
             char bg_txt[48];
             snprintf(bg_txt, sizeof(bg_txt), "Latar: %s", cur_bg->display_name);
-            MakeLabel(list, bg_txt, 14, 320, 212, 16, FONT_10, C_CYAN);
+            MakeLabel(list, bg_txt, 14, 316, 212, 14, FONT_10, C_CYAN);
         }
 
-        // Section 3: High Contrast Text Colors (10 Choices)
-        MakeLabel(list, "WARNA TEKS & KONTRAS (10 PILIHAN)", 14, 342, 212, 14, FONT_10, C_MUTED);
+        // Section 3: High Contrast Text Colors (Full 31 Choices)
+        MakeLabel(list, "WARNA TEKS & KONTRAS (31 PILIHAN)", 14, 334, 212, 14, FONT_10, C_MUTED);
 
         lv_obj_t* tc_box = lv_obj_create(list);
-        lv_obj_set_pos(tc_box, 12, 358);
+        lv_obj_set_pos(tc_box, 12, 350);
         lv_obj_set_size(tc_box, 216, 34);
         lv_obj_set_flex_flow(tc_box, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(tc_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -3570,7 +3718,6 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_scroll_dir(tc_box, LV_DIR_HOR);
         lv_obj_set_scrollbar_mode(tc_box, LV_SCROLLBAR_MODE_OFF);
 
-        const auto* cur_tc = GetCurrentSyncedTextColor();
         size_t tc_count = 0;
         const auto* tcs = GetTextColorTable(&tc_count);
         for (size_t i = 0; i < tc_count; ++i) {
@@ -3615,14 +3762,43 @@ void NovaDisplay::BuildDisplay() {
             }, LV_EVENT_CLICKED, this);
         }
 
+        // Custom RGB Button for Text Color
+        MakeButton(list, "🎨 ATUR RGB TEKS SENDIRI", 12, 388, 216, 28, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+            [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (self) self->ShowRgbMixerModal(true);
+            }, this);
+
         if (cur_tc) {
             char tc_txt[48];
             snprintf(tc_txt, sizeof(tc_txt), "Teks: %s", cur_tc->display_name);
-            MakeLabel(list, tc_txt, 14, 396, 212, 16, FONT_10, C_CYAN);
+            MakeLabel(list, tc_txt, 14, 420, 212, 14, FONT_10, C_CYAN);
         }
 
-        // Section 4: Screen Rotation Button
-        MakeButton(list, "ROTASI LAYAR 90°", 12, 418, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        // Section 4: Text Weight (Ketebalan Teks - 4 Level)
+        MakeLabel(list, "KETEBALAN TEKS (FONT WEIGHT)", 14, 440, 212, 14, FONT_10, C_MUTED);
+        make_level_button(list, "NORMAL", 12, 456, 48, 28, cur_weight == 0, on_weight_click, 0);
+        make_level_button(list, "SEDANG", 68, 456, 48, 28, cur_weight == 1, on_weight_click, 1);
+        make_level_button(list, "TEBAL", 124, 456, 48, 28, cur_weight == 2, on_weight_click, 2);
+        make_level_button(list, "EKSTRA", 180, 456, 48, 28, cur_weight == 3, on_weight_click, 3);
+
+        // Section 5: Contrast (Kontras Background & Panel - 4 Level)
+        MakeLabel(list, "KONTRAS LATAR & PANEL", 14, 492, 212, 14, FONT_10, C_MUTED);
+        make_level_button(list, "LEMBUT", 12, 508, 48, 28, cur_contrast == 0, on_contrast_click, 0);
+        make_level_button(list, "NORMAL", 68, 508, 48, 28, cur_contrast == 1, on_contrast_click, 1);
+        make_level_button(list, "TINGGI", 124, 508, 48, 28, cur_contrast == 2, on_contrast_click, 2);
+        make_level_button(list, "EKSTREM", 180, 508, 48, 28, cur_contrast == 3, on_contrast_click, 3);
+
+        // Section 6: Sharpness (Ketajaman & Saturasi Tema - 4 Level)
+        MakeLabel(list, "KETAJAMAN WARNA TEMA", 14, 544, 212, 14, FONT_10, C_MUTED);
+        make_level_button(list, "HALUS", 12, 560, 48, 28, cur_sharpness == 0, on_sharpness_click, 0);
+        make_level_button(list, "STANDAR", 68, 560, 48, 28, cur_sharpness == 1, on_sharpness_click, 1);
+        make_level_button(list, "TAJAM", 124, 560, 48, 28, cur_sharpness == 2, on_sharpness_click, 2);
+        make_level_button(list, "EKSTREM", 180, 560, 48, 28, cur_sharpness == 3, on_sharpness_click, 3);
+
+        // Section 7: Screen Rotation Button
+        MakeButton(list, "ROTASI LAYAR 90°", 12, 600, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
             [](lv_event_t* e) {
                 (void)e;
                 Board::GetInstance().RotateDisplay();

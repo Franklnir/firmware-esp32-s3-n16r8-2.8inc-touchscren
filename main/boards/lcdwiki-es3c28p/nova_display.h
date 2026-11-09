@@ -175,13 +175,23 @@ public:
     std::string GetCurrentTextColorId() const;
     void UpdateResolvedTextColor();
 
+    void ApplyContrast(int contrast, bool persist = true);
+    int GetCurrentContrast() const;
+
+    void ApplySharpness(int sharpness, bool persist = true);
+    int GetCurrentSharpness() const;
+
+    void ApplyTextWeight(int weight, bool persist = true);
+    int GetCurrentTextWeight() const;
+    void ApplyTextWeightToObj(lv_obj_t* obj, lv_color_t color);
+
     bool IsNotifSoundEnabled() const;
     void SetNotifSoundEnabled(bool en);
     int GetNotifSoundIndex() const;
     void SetNotifSoundIndex(int idx);
     void PreviewNotifSound(int idx);
 
-    void ShowRgbMixerModal();
+    void ShowRgbMixerModal(bool is_text_color = false);
     void CloseRgbMixerModal();
     void UpdateRgbMixerPreview();
 
@@ -697,6 +707,11 @@ private:
     int display_tc_scroll_x_ = 0;
     int audio_scroll_y_ = 0;
 
+    // --- Display & Theme Enhancements State ---
+    int contrast_level_ = 1;
+    int sharpness_level_ = 1;
+    int text_weight_ = 0;
+
     // --- RGB Mixer Modal State ---
     lv_obj_t* rgb_modal_ = nullptr;
     lv_obj_t* rgb_preview_box_ = nullptr;
@@ -710,6 +725,7 @@ private:
     uint8_t mixer_r_ = 20;
     uint8_t mixer_g_ = 30;
     uint8_t mixer_b_ = 50;
+    bool mixer_is_text_ = false;
 
     // --- Games Hub Modal State ---
     lv_obj_t* games_modal_ = nullptr;
