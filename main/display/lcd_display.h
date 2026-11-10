@@ -25,6 +25,12 @@ protected:
     lv_obj_t* side_bar_ = nullptr;
     lv_obj_t* bottom_bar_ = nullptr;
     lv_obj_t* xiaozhi_bottom_nav_ = nullptr;
+    lv_obj_t* bottom_nav_back_btn_ = nullptr;
+    lv_obj_t* bottom_nav_back_lbl_ = nullptr;
+    lv_obj_t* bottom_nav_home_btn_ = nullptr;
+    lv_obj_t* bottom_nav_home_lbl_ = nullptr;
+    lv_obj_t* bottom_nav_recent_btn_ = nullptr;
+    lv_obj_t* bottom_nav_recent_sq_ = nullptr;
     lv_obj_t* preview_image_ = nullptr;
     lv_obj_t* emoji_label_ = nullptr;
     lv_obj_t* emoji_image_ = nullptr;

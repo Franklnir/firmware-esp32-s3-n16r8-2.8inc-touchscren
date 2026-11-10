@@ -1111,6 +1111,8 @@ lv_obj_t* NovaDisplay::NewRoot() {
     mon_temp_lbl_ = mon_wifi_lbl_ = mon_uptime_lbl_ = nullptr;
     flappy_score_lbl_ = flappy_best_lbl_ = flappy_card_ = nullptr;
 
+    lv_anim_delete_all();
+
     lv_obj_t* root = lv_scr_act();
     lv_obj_clean(root);
     lv_obj_clear_flag(root, LV_OBJ_FLAG_SCROLLABLE);

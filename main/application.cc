@@ -502,10 +502,12 @@ void Application::CheckAssetsVersion() {
         }
     }
 
-    // Apply assets
-    assets.Apply();
-    display->SetChatMessage("system", "");
-    display->SetEmotion("robot_2");
+    // Apply assets safely via main event loop
+    Schedule([display]() {
+        Assets::GetInstance().Apply();
+        display->SetChatMessage("system", "");
+        display->SetEmotion("robot_2");
+    });
 }
 
 void Application::CheckNewVersion() {

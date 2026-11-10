@@ -262,8 +262,8 @@ public:
         uint8_t points = buf[0] & 0x0F;
         uint8_t event_flag = (buf[1] >> 6) & 0x03;
 
-        // Sentuhan valid jika points >= 1, atau event_flag = Down (0) / Contact (2)
-        bool has_touch = (points >= 1 && points <= 2) || (points == 0 && (event_flag == 0 || event_flag == 2));
+        // Sentuhan valid jika points >= 1 dan points <= 2
+        bool has_touch = (points >= 1 && points <= 2);
         if (!has_touch) return true;
 
         uint16_t raw_x = ((buf[1] & 0x0F) << 8) | buf[2];
@@ -2332,8 +2332,11 @@ private:
                         }
                     } else {
                         // --- MODE XIAOZHI ---
-                        // Abaikan gestur jika tap berada di area top bar atau bottom navbar
-                        if (start_scr_y > top_bar_h && start_scr_y < bot_bar_y) {
+                        // Abaikan gestur jika modal/control center terbuka, atau jika tap berada di area top bar atau bottom navbar
+                        bool modal_active = (self->display_ && (self->display_->IsControlCenterVisible() ||
+                                                                self->display_->IsOverlayVisible() ||
+                                                                self->display_->IsRecentAppsModalVisible()));
+                        if (!modal_active && start_scr_y > top_bar_h && start_scr_y < bot_bar_y) {
                             static uint32_t last_xz_tap = 0;
                             static int xz_taps = 0;
 

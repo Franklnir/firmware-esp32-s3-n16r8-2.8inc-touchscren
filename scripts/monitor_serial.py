@@ -2,7 +2,7 @@ import sys
 import time
 import serial
 
-PORT = 'COM14'
+PORT = sys.argv[1] if len(sys.argv) > 1 else 'COM26'
 BAUD = 115200
 LOG_FILE = 'monitor.log'
 

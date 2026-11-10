@@ -574,6 +574,12 @@ LcdDisplay::~LcdDisplay() {
     if (xiaozhi_bottom_nav_ != nullptr) {
         lv_obj_del(xiaozhi_bottom_nav_);
         xiaozhi_bottom_nav_ = nullptr;
+        bottom_nav_back_btn_ = nullptr;
+        bottom_nav_back_lbl_ = nullptr;
+        bottom_nav_home_btn_ = nullptr;
+        bottom_nav_home_lbl_ = nullptr;
+        bottom_nav_recent_btn_ = nullptr;
+        bottom_nav_recent_sq_ = nullptr;
     }
     if (status_bar_ != nullptr) {
         lv_obj_del(status_bar_);
@@ -945,44 +951,54 @@ void LcdDisplay::SetChatMessage_Theme2(const char* role, const char* content) {
         return;
     }
 
-    // Check if message count exceeds limit
+    // Check if message count exceeds limit - safely hide oldest unhidden message
     uint32_t child_count = lv_obj_get_child_cnt(content_);
     if (child_count >= MAX_MESSAGES) {
-        // Delete the oldest message (first child object)
-        lv_obj_t* first_child = lv_obj_get_child(content_, 0);
-        if (first_child != nullptr) {
-            lv_obj_del(first_child);
-            // Refresh child count after deletion
-            child_count = lv_obj_get_child_cnt(content_);
-        }
-        // Scroll to the last message immediately (get last_child after deletion)
-        if (child_count > 0) {
-            lv_obj_t* last_child = lv_obj_get_child(content_, child_count - 1);
-            if (last_child != nullptr && lv_obj_is_valid(last_child)) {
-                lv_obj_scroll_to_view_recursive(last_child, LV_ANIM_OFF);
+        for (uint32_t i = 0; i < child_count; i++) {
+            lv_obj_t* ch = lv_obj_get_child(content_, i);
+            if (ch && !lv_obj_has_flag(ch, LV_OBJ_FLAG_HIDDEN)) {
+                lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
+                break;
             }
         }
     }
 
-    // Collapse system messages (if it's a system message, check if the last message is also a
-    // system message)
+    // Collapse or update system messages (if it's a system message, update existing or hide it)
     if (strcmp(role, "system") == 0) {
-        // Refresh child count to get accurate count after potential deletion above
         child_count = lv_obj_get_child_cnt(content_);
         if (child_count > 0) {
-            // Get the last message container
-            lv_obj_t* last_container = lv_obj_get_child(content_, child_count - 1);
-            if (last_container != nullptr && lv_obj_is_valid(last_container) &&
-                lv_obj_get_child_cnt(last_container) > 0) {
-                // Get the bubble inside the container
-                lv_obj_t* last_bubble = lv_obj_get_child(last_container, 0);
-                if (last_bubble != nullptr && lv_obj_is_valid(last_bubble)) {
-                    // Check if bubble type is system message
-                    void* bubble_type_ptr = lv_obj_get_user_data(last_bubble);
-                    if (bubble_type_ptr != nullptr &&
-                        strcmp((const char*)bubble_type_ptr, "system") == 0) {
-                        // If the last message is also a system message, delete it
-                        lv_obj_del(last_container);
+            lv_obj_t* last_obj = lv_obj_get_child(content_, child_count - 1);
+            if (last_obj != nullptr && lv_obj_is_valid(last_obj)) {
+                void* bubble_type_ptr = lv_obj_get_user_data(last_obj);
+                lv_obj_t* text_label = nullptr;
+                if (lv_obj_get_child_cnt(last_obj) > 0) {
+                    lv_obj_t* child0 = lv_obj_get_child(last_obj, 0);
+                    if (child0 != nullptr && lv_obj_is_valid(child0)) {
+                        if (bubble_type_ptr == nullptr) {
+                            bubble_type_ptr = lv_obj_get_user_data(child0);
+                        }
+                        if (lv_obj_get_child_cnt(child0) > 0) {
+                            text_label = lv_obj_get_child(child0, 0);
+                        } else {
+                            text_label = child0;
+                        }
+                    }
+                }
+
+                if (bubble_type_ptr != nullptr && strcmp((const char*)bubble_type_ptr, "system") == 0) {
+                    if (content == nullptr || content[0] == '\0') {
+                        // Empty message: cleanly hide previous system message without destroying objects
+                        lv_obj_add_flag(last_obj, LV_OBJ_FLAG_HIDDEN);
+                        return;
+                    } else if (text_label != nullptr && lv_obj_is_valid(text_label)) {
+                        // In-place text update without deleting/reallocating widgets
+                        lv_obj_remove_flag(last_obj, LV_OBJ_FLAG_HIDDEN);
+                        lv_label_set_text(text_label, content);
+                        lv_obj_scroll_to_view_recursive(last_obj, LV_ANIM_OFF);
+                        return;
+                    } else {
+                        // Hide previous system message to avoid memory/event corruption
+                        lv_obj_add_flag(last_obj, LV_OBJ_FLAG_HIDDEN);
                     }
                 }
             }
@@ -995,18 +1011,27 @@ void LcdDisplay::SetChatMessage_Theme2(const char* role, const char* content) {
     }
 
     // Avoid empty message boxes
-    if (strlen(content) == 0) {
+    if (content == nullptr || content[0] == '\0') {
         return;
     }
 
     auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
 
-    // Create a message bubble
-    lv_obj_t* msg_bubble = lv_obj_create(content_);
+    // 1. Create a full-width container first under content_
+    lv_obj_t* container = lv_obj_create(content_);
+    lv_obj_set_width(container, lv_pct(100));
+    lv_obj_set_height(container, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(container, 0, 0);
+    lv_obj_set_style_pad_all(container, 0, 0);
+    lv_obj_remove_flag(container, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_user_data(container, (void*)role);
+
+    // 2. Create the message bubble directly inside container
+    lv_obj_t* msg_bubble = lv_obj_create(container);
     lv_obj_set_style_radius(msg_bubble, 8, 0);
     lv_obj_set_scrollbar_mode(msg_bubble, LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(msg_bubble, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(msg_bubble, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_style_border_width(msg_bubble, 0, 0);
     lv_obj_set_style_pad_left(msg_bubble, 8, 0);
     lv_obj_set_style_pad_right(msg_bubble, 8, 0);
@@ -1014,6 +1039,7 @@ void LcdDisplay::SetChatMessage_Theme2(const char* role, const char* content) {
     lv_obj_set_style_pad_bottom(msg_bubble, 3, 0);
     lv_obj_set_flex_flow(msg_bubble, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(msg_bubble, 1, 0);
+    lv_obj_set_user_data(msg_bubble, (void*)role);
 
     // Create the message text with dynamic chat font size
     lv_obj_t* msg_text = lv_label_create(msg_bubble);
@@ -1057,9 +1083,6 @@ void LcdDisplay::SetChatMessage_Theme2(const char* role, const char* content) {
         lv_obj_set_style_border_width(msg_bubble, 1, 0);
         lv_obj_set_style_border_color(msg_bubble, lvgl_theme->border_color(), 0);
         lv_obj_set_style_text_color(msg_text, text_col, 0);
-
-        // Set custom attribute to mark bubble type
-        lv_obj_set_user_data(msg_bubble, (void*)"user");
         lv_obj_set_style_flex_grow(msg_bubble, 0, 0);
     } else if (strcmp(role, "assistant") == 0) {
         lv_color_t bubble_bg = lvgl_theme->assistant_bubble_color();
@@ -1069,17 +1092,11 @@ void LcdDisplay::SetChatMessage_Theme2(const char* role, const char* content) {
         lv_obj_set_style_border_width(msg_bubble, 1, 0);
         lv_obj_set_style_border_color(msg_bubble, lvgl_theme->border_color(), 0);
         lv_obj_set_style_text_color(msg_text, text_col, 0);
-
-        // Set custom attribute to mark bubble type
-        lv_obj_set_user_data(msg_bubble, (void*)"assistant");
         lv_obj_set_style_flex_grow(msg_bubble, 0, 0);
     } else if (strcmp(role, "system") == 0) {
         lv_obj_set_style_bg_color(msg_bubble, lvgl_theme->system_bubble_color(), 0);
         lv_obj_set_style_bg_opa(msg_bubble, LV_OPA_70, 0);
         lv_obj_set_style_text_color(msg_text, lvgl_theme->system_text_color(), 0);
-
-        // Set custom attribute to mark bubble type
-        lv_obj_set_user_data(msg_bubble, (void*)"system");
         lv_obj_set_style_flex_grow(msg_bubble, 0, 0);
     }
 
@@ -1117,16 +1134,6 @@ void LcdDisplay::SetChatMessage_Theme2(const char* role, const char* content) {
         lv_obj_set_style_text_opa(time_label, LV_OPA_60, 0);
     }
 
-    // Create a full-width container to manage alignment cleanly without flex cross-axis fighting
-    lv_obj_t* container = lv_obj_create(content_);
-    lv_obj_set_width(container, lv_pct(100));
-    lv_obj_set_height(container, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(container, 0, 0);
-    lv_obj_set_style_pad_all(container, 0, 0);
-    lv_obj_remove_flag(container, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_set_parent(msg_bubble, container);
     if (strcmp(role, "user") == 0) {
         lv_obj_align(msg_bubble, LV_ALIGN_RIGHT_MID, 0, 0);
     } else if (strcmp(role, "system") == 0) {
@@ -1134,7 +1141,7 @@ void LcdDisplay::SetChatMessage_Theme2(const char* role, const char* content) {
     } else {
         lv_obj_align(msg_bubble, LV_ALIGN_LEFT_MID, 0, 0);
     }
-    lv_obj_scroll_to_view_recursive(container, LV_ANIM_ON);
+    lv_obj_scroll_to_view_recursive(container, LV_ANIM_OFF);
 
     // Store reference to the latest message label
     chat_message_label_ = msg_text;
@@ -1760,9 +1767,6 @@ void LcdDisplay::CreateControlCenter() {
             auto disp = static_cast<LcdDisplay*>(user_data);
             int target = (disp->GetUiThemeId() == 1) ? 2 : 1;
             disp->SetUiThemeId(target);
-            if (disp->cp_theme_icon_label_) {
-                lv_label_set_text_fmt(disp->cp_theme_icon_label_, MATERIAL_SYMBOLS_STAR " Thema %d", target);
-            }
             disp->ShowNotification(target == 1 ? "Switched to Thema 1" : "Switched to Thema 2");
         }, display);
     }, LV_EVENT_CLICKED, this);
@@ -2239,7 +2243,7 @@ void LcdDisplay::ShowTextSizeOverlay() {
 
 void LcdDisplay::CloseRecentAppsModal() {
     if (recent_apps_modal_ != nullptr) {
-        lv_obj_del(recent_apps_modal_);
+        lv_obj_del_async(recent_apps_modal_);
         recent_apps_modal_ = nullptr;
     }
 }
@@ -2493,7 +2497,7 @@ void LcdDisplay::ShowCaptureFlash() {
     lv_timer_t* timer = lv_timer_create([](lv_timer_t* t) {
         lv_obj_t* obj = static_cast<lv_obj_t*>(lv_timer_get_user_data(t));
         if (obj && lv_obj_is_valid(obj)) {
-            lv_obj_del(obj);
+            lv_obj_delete_async(obj);
         }
         lv_timer_del(t);
     }, 250, flash);
@@ -2588,11 +2592,6 @@ void LcdDisplay::CreateBottomNav() {
     lv_obj_t* top_layer = lv_layer_top();
     if (!top_layer) return;
 
-    if (xiaozhi_bottom_nav_ != nullptr) {
-        lv_obj_del(xiaozhi_bottom_nav_);
-        xiaozhi_bottom_nav_ = nullptr;
-    }
-
     auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
     auto icon_font = lvgl_theme ? lvgl_theme->icon_font()->font() : &BUILTIN_ICON_FONT;
 
@@ -2602,6 +2601,26 @@ void LcdDisplay::CreateBottomNav() {
     lv_color_t xz_border = (synced_bg) ? lv_color_hex(synced_bg->border_color) : (lvgl_theme ? lvgl_theme->border_color() : lv_color_hex(0x2B3B52));
     lv_color_t xz_accent = (synced) ? lv_color_hex(synced->accent_color) : lv_color_hex(0x63DDF2);
     lv_color_t xz_muted = lv_color_hex(0x91A0B5);
+
+    if (xiaozhi_bottom_nav_ != nullptr) {
+        // Safe in-place style update: NEVER delete widgets during runtime to avoid watchdog crashes and event corruption!
+        lv_obj_set_size(xiaozhi_bottom_nav_, width_, 30);
+        lv_obj_set_style_bg_color(xiaozhi_bottom_nav_, xz_bg, 0);
+        lv_obj_set_style_border_color(xiaozhi_bottom_nav_, xz_border, 0);
+        if (bottom_nav_back_btn_) lv_obj_set_style_bg_color(bottom_nav_back_btn_, xz_bg, 0);
+        if (bottom_nav_back_lbl_) {
+            lv_obj_set_style_text_font(bottom_nav_back_lbl_, icon_font, 0);
+            lv_obj_set_style_text_color(bottom_nav_back_lbl_, xz_muted, 0);
+        }
+        if (bottom_nav_home_btn_) lv_obj_set_style_bg_color(bottom_nav_home_btn_, xz_bg, 0);
+        if (bottom_nav_home_lbl_) {
+            lv_obj_set_style_text_font(bottom_nav_home_lbl_, icon_font, 0);
+            lv_obj_set_style_text_color(bottom_nav_home_lbl_, xz_accent, 0);
+        }
+        if (bottom_nav_recent_btn_) lv_obj_set_style_bg_color(bottom_nav_recent_btn_, xz_bg, 0);
+        if (bottom_nav_recent_sq_) lv_obj_set_style_border_color(bottom_nav_recent_sq_, xz_muted, 0);
+        return;
+    }
 
     xiaozhi_bottom_nav_ = lv_obj_create(top_layer);
     lv_obj_set_size(xiaozhi_bottom_nav_, width_, 30);
@@ -2621,20 +2640,20 @@ void LcdDisplay::CreateBottomNav() {
     lv_obj_clear_flag(xiaozhi_bottom_nav_, LV_OBJ_FLAG_SCROLLABLE);
 
     // 1. Back Button (◀)
-    lv_obj_t* back_btn = lv_button_create(xiaozhi_bottom_nav_);
-    lv_obj_set_height(back_btn, 26);
-    lv_obj_set_flex_grow(back_btn, 1);
-    lv_obj_set_style_radius(back_btn, 6, 0);
-    lv_obj_set_style_bg_color(back_btn, xz_bg, 0);
-    lv_obj_set_style_border_width(back_btn, 0, 0);
-    lv_obj_set_style_pad_all(back_btn, 0, 0);
-    lv_obj_set_style_shadow_width(back_btn, 0, 0);
-    lv_obj_t* back_lbl = lv_label_create(back_btn);
-    lv_label_set_text(back_lbl, MATERIAL_SYMBOLS_ARROW_BACK);
-    lv_obj_set_style_text_font(back_lbl, icon_font, 0);
-    lv_obj_set_style_text_color(back_lbl, xz_muted, 0);
-    lv_obj_center(back_lbl);
-    lv_obj_add_event_cb(back_btn, [](lv_event_t* e) {
+    bottom_nav_back_btn_ = lv_button_create(xiaozhi_bottom_nav_);
+    lv_obj_set_height(bottom_nav_back_btn_, 26);
+    lv_obj_set_flex_grow(bottom_nav_back_btn_, 1);
+    lv_obj_set_style_radius(bottom_nav_back_btn_, 6, 0);
+    lv_obj_set_style_bg_color(bottom_nav_back_btn_, xz_bg, 0);
+    lv_obj_set_style_border_width(bottom_nav_back_btn_, 0, 0);
+    lv_obj_set_style_pad_all(bottom_nav_back_btn_, 0, 0);
+    lv_obj_set_style_shadow_width(bottom_nav_back_btn_, 0, 0);
+    bottom_nav_back_lbl_ = lv_label_create(bottom_nav_back_btn_);
+    lv_label_set_text(bottom_nav_back_lbl_, MATERIAL_SYMBOLS_ARROW_BACK);
+    lv_obj_set_style_text_font(bottom_nav_back_lbl_, icon_font, 0);
+    lv_obj_set_style_text_color(bottom_nav_back_lbl_, xz_muted, 0);
+    lv_obj_center(bottom_nav_back_lbl_);
+    lv_obj_add_event_cb(bottom_nav_back_btn_, [](lv_event_t* e) {
         auto display = static_cast<LcdDisplay*>(lv_event_get_user_data(e));
         if (!display) return;
         if (display->IsRecentAppsModalVisible()) {
@@ -2661,20 +2680,20 @@ void LcdDisplay::CreateBottomNav() {
     }, LV_EVENT_CLICKED, this);
 
     // 2. Home Button (●)
-    lv_obj_t* home_btn = lv_button_create(xiaozhi_bottom_nav_);
-    lv_obj_set_height(home_btn, 26);
-    lv_obj_set_flex_grow(home_btn, 1);
-    lv_obj_set_style_radius(home_btn, 6, 0);
-    lv_obj_set_style_bg_color(home_btn, xz_bg, 0);
-    lv_obj_set_style_border_width(home_btn, 0, 0);
-    lv_obj_set_style_pad_all(home_btn, 0, 0);
-    lv_obj_set_style_shadow_width(home_btn, 0, 0);
-    lv_obj_t* home_lbl = lv_label_create(home_btn);
-    lv_label_set_text(home_lbl, MATERIAL_SYMBOLS_HOME);
-    lv_obj_set_style_text_font(home_lbl, icon_font, 0);
-    lv_obj_set_style_text_color(home_lbl, xz_accent, 0);
-    lv_obj_center(home_lbl);
-    lv_obj_add_event_cb(home_btn, [](lv_event_t* e) {
+    bottom_nav_home_btn_ = lv_button_create(xiaozhi_bottom_nav_);
+    lv_obj_set_height(bottom_nav_home_btn_, 26);
+    lv_obj_set_flex_grow(bottom_nav_home_btn_, 1);
+    lv_obj_set_style_radius(bottom_nav_home_btn_, 6, 0);
+    lv_obj_set_style_bg_color(bottom_nav_home_btn_, xz_bg, 0);
+    lv_obj_set_style_border_width(bottom_nav_home_btn_, 0, 0);
+    lv_obj_set_style_pad_all(bottom_nav_home_btn_, 0, 0);
+    lv_obj_set_style_shadow_width(bottom_nav_home_btn_, 0, 0);
+    bottom_nav_home_lbl_ = lv_label_create(bottom_nav_home_btn_);
+    lv_label_set_text(bottom_nav_home_lbl_, MATERIAL_SYMBOLS_HOME);
+    lv_obj_set_style_text_font(bottom_nav_home_lbl_, icon_font, 0);
+    lv_obj_set_style_text_color(bottom_nav_home_lbl_, xz_accent, 0);
+    lv_obj_center(bottom_nav_home_lbl_);
+    lv_obj_add_event_cb(bottom_nav_home_btn_, [](lv_event_t* e) {
         if (YouTubeAudioPoller::GetInstance().IsPlaying()) {
             YouTubeAudioPoller::GetInstance().Abort();
         }
@@ -2688,27 +2707,27 @@ void LcdDisplay::CreateBottomNav() {
     }, LV_EVENT_CLICKED, this);
 
     // 3. Recent Apps Button (▢)
-    lv_obj_t* recent_btn = lv_button_create(xiaozhi_bottom_nav_);
-    lv_obj_set_height(recent_btn, 26);
-    lv_obj_set_flex_grow(recent_btn, 1);
-    lv_obj_set_style_radius(recent_btn, 6, 0);
-    lv_obj_set_style_bg_color(recent_btn, xz_bg, 0);
-    lv_obj_set_style_border_width(recent_btn, 0, 0);
-    lv_obj_set_style_pad_all(recent_btn, 0, 0);
-    lv_obj_set_style_shadow_width(recent_btn, 0, 0);
+    bottom_nav_recent_btn_ = lv_button_create(xiaozhi_bottom_nav_);
+    lv_obj_set_height(bottom_nav_recent_btn_, 26);
+    lv_obj_set_flex_grow(bottom_nav_recent_btn_, 1);
+    lv_obj_set_style_radius(bottom_nav_recent_btn_, 6, 0);
+    lv_obj_set_style_bg_color(bottom_nav_recent_btn_, xz_bg, 0);
+    lv_obj_set_style_border_width(bottom_nav_recent_btn_, 0, 0);
+    lv_obj_set_style_pad_all(bottom_nav_recent_btn_, 0, 0);
+    lv_obj_set_style_shadow_width(bottom_nav_recent_btn_, 0, 0);
 
-    lv_obj_t* sq_shape = lv_obj_create(recent_btn);
-    lv_obj_set_size(sq_shape, 14, 14);
-    lv_obj_center(sq_shape);
-    lv_obj_clear_flag(sq_shape, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
-    lv_obj_set_style_radius(sq_shape, 3, 0);
-    lv_obj_set_style_bg_opa(sq_shape, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_color(sq_shape, xz_muted, 0);
-    lv_obj_set_style_border_width(sq_shape, 2, 0);
-    lv_obj_set_style_pad_all(sq_shape, 0, 0);
-    lv_obj_set_style_shadow_width(sq_shape, 0, 0);
+    bottom_nav_recent_sq_ = lv_obj_create(bottom_nav_recent_btn_);
+    lv_obj_set_size(bottom_nav_recent_sq_, 14, 14);
+    lv_obj_center(bottom_nav_recent_sq_);
+    lv_obj_clear_flag(bottom_nav_recent_sq_, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE));
+    lv_obj_set_style_radius(bottom_nav_recent_sq_, 3, 0);
+    lv_obj_set_style_bg_opa(bottom_nav_recent_sq_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_color(bottom_nav_recent_sq_, xz_muted, 0);
+    lv_obj_set_style_border_width(bottom_nav_recent_sq_, 2, 0);
+    lv_obj_set_style_pad_all(bottom_nav_recent_sq_, 0, 0);
+    lv_obj_set_style_shadow_width(bottom_nav_recent_sq_, 0, 0);
 
-    lv_obj_add_event_cb(recent_btn, [](lv_event_t* e) {
+    lv_obj_add_event_cb(bottom_nav_recent_btn_, [](lv_event_t* e) {
         auto display = static_cast<LcdDisplay*>(lv_event_get_user_data(e));
         if (display) {
             if (display->IsRecentAppsModalVisible()) {
@@ -2810,10 +2829,19 @@ void LcdDisplay::DestroyUI() {
         gif_controller_.reset();
     }
 
+    lv_anim_delete_all();
+
     auto screen = lv_screen_active();
     if (screen != nullptr) {
         lv_obj_clean(screen);
     }
+
+    bottom_nav_back_btn_ = nullptr;
+    bottom_nav_back_lbl_ = nullptr;
+    bottom_nav_home_btn_ = nullptr;
+    bottom_nav_home_lbl_ = nullptr;
+    bottom_nav_recent_btn_ = nullptr;
+    bottom_nav_recent_sq_ = nullptr;
 
     music_container_ = nullptr;
     dj_icon_label_ = nullptr;
@@ -3123,7 +3151,9 @@ void LcdDisplay::UpdateIdleDashboard() {
 
         // Update clock and date every second
         time_t now = time(NULL);
-        struct tm* tm = localtime(&now);
+        struct tm tm_buf;
+        struct tm* tm = localtime_r(&now, &tm_buf);
+        if (!tm) return;
 
         // Auto-poke SNTP if Wi-Fi connected and time not synced yet!
         esp_netif_ip_info_t ip_info;
@@ -3578,10 +3608,10 @@ void LcdDisplay::ShowWifiConfigModal() {
         bool is_land = (LV_HOR_RES > 260);
         int expected_w = is_land ? (LV_HOR_RES - 8) : 236;
         if (lv_obj_get_width(wifi_modal_) != expected_w) {
-            lv_obj_del(wifi_modal_);
+            lv_obj_delete_async(wifi_modal_);
             wifi_modal_ = nullptr;
             if (wifi_modal_backdrop_) {
-                lv_obj_del(wifi_modal_backdrop_);
+                lv_obj_delete_async(wifi_modal_backdrop_);
                 wifi_modal_backdrop_ = nullptr;
             }
         }
@@ -4278,9 +4308,12 @@ void LcdDisplay::CreateMusicVisualizerUI() {
         // WhatsApp Chat Column Music Player Bubble inside content_
         uint32_t child_count = lv_obj_get_child_cnt(content_);
         if (child_count >= MAX_MESSAGES) {
-            lv_obj_t* first_child = lv_obj_get_child(content_, 0);
-            if (first_child != nullptr) {
-                lv_obj_del(first_child);
+            for (uint32_t i = 0; i < child_count; i++) {
+                lv_obj_t* ch = lv_obj_get_child(content_, i);
+                if (ch && !lv_obj_has_flag(ch, LV_OBJ_FLAG_HIDDEN)) {
+                    lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
+                    break;
+                }
             }
         }
 
