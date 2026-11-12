@@ -284,6 +284,15 @@ public:
     void SetBatteryStyle(uint8_t style);
     uint8_t GetBatteryStyle() const { return bat_style_; }
 
+    enum IconColorMode : uint8_t {
+        ICON_COLOR_MIXED = 0,   // Campuran Warna-warni Khas Tiap Aplikasi
+        ICON_COLOR_RANDOM = 1,  // Acak Total (Random Shuffle Tiap Buka Layar)
+        ICON_COLOR_THEME = 2    // Mengikuti Aksen Tema Aktif
+    };
+    void SetIconColorMode(uint8_t mode);
+    uint8_t GetIconColorMode() const { return icon_color_mode_; }
+    lv_color_t GetAppIconColor(int index, IconKind kind);
+
     void ShowNotificationBanner(const std::string& app, const std::string& title, const std::string& message);
     void DismissNotificationBanner();
     void ShowOtpHighlight(const std::string& service, const std::string& otp_code, const std::string& full_message);
@@ -376,6 +385,7 @@ private:
     lv_obj_t* top_battery_label_ = nullptr;
     lv_obj_t* bt_modal_ = nullptr;
     uint8_t bat_style_ = BAT_STYLE_ICON_PERCENT;
+    uint8_t icon_color_mode_ = ICON_COLOR_MIXED;
 
     // Audio page handles
     lv_obj_t* audio_volume_label_ = nullptr;

@@ -48,6 +48,7 @@ bool qrcodegen_getModule(const uint8_t qrcode[], int x, int y);
 #include <ssid_manager.h>
 #include <wifi_manager.h>
 #include <board.h>
+#include <cJSON.h>
 
 #include <ctime>
 #include <cmath>
@@ -99,6 +100,8 @@ NovaDisplay::NovaDisplay(const NovaCallbacks& callbacks)
     use_24hour_ = prefs.GetInt("24hour", 1) != 0;
     bat_style_ = (uint8_t)prefs.GetInt("bat_style", BAT_STYLE_ICON_PERCENT);
     if (bat_style_ > BAT_STYLE_PERCENT_ONLY) bat_style_ = BAT_STYLE_ICON_PERCENT;
+    icon_color_mode_ = (uint8_t)prefs.GetInt("icon_mode", ICON_COLOR_MIXED);
+    if (icon_color_mode_ > ICON_COLOR_THEME) icon_color_mode_ = ICON_COLOR_MIXED;
 
     Settings sys("system", true);
     language_idx_ = sys.GetInt("lang_idx", 0);
@@ -975,20 +978,20 @@ void NovaDisplay::ShowRecentAppsModal() {
     };
 
     const AppCardItem items[] = {
-        {"Radio Streaming", "Stasiun Live Musik & Berita", MATERIAL_SYMBOLS_HEADPHONES, C_MINT, -1, PAGE_RADIO},
-        {"Xiaozhi AI", "Percakapan Suara & Musik LLM", MATERIAL_SYMBOLS_ROBOT_2, C_CYAN, 0, PAGE_AI},
-        {"Chronchi Watch", "Smartwatch, Kalender & Timer", MATERIAL_SYMBOLS_WATCH, C_AMBER, 1, PAGE_HOME},
-        {"Beranda OS", "Dashboard Utama & Widget", MATERIAL_SYMBOLS_HOME, C_CYAN, -1, PAGE_HOME},
-        {"Chronos Pomodoro", "Timer Fokus 25 Menit", MATERIAL_SYMBOLS_SCHEDULE, C_AMBER, -1, PAGE_CHRONOS},
-        {"Wi-Fi & Jaringan", "Pemindai SSID & Status IP", MATERIAL_SYMBOLS_WIFI, C_MINT, -1, PAGE_WIFI},
-        {"Tampilan & Layar", "Pengaturan Kecerahan Backlight", MATERIAL_SYMBOLS_BRIGHTNESS_6, C_AMBER, -1, PAGE_DISPLAY},
-        {"Audio & Suara", "Driver ES8311 & Amplifier", MATERIAL_SYMBOLS_VOLUME_UP, C_CYAN, -1, PAGE_AUDIO},
-        {"Baterai & Daya", "Pemantau ADC & Voltase TP4054", MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL, C_MINT, -1, PAGE_BATTERY},
-        {"File Hub", "16MB Flash Storage & Partisi", MATERIAL_SYMBOLS_SD_CARD, C_VIOLET, -1, PAGE_FILES},
-        {"Pengaturan Sistem", "Preferensi & Informasi Chip", MATERIAL_SYMBOLS_SETTINGS, C_VIOLET, -1, PAGE_SETTINGS},
-        {"Pin Lab", "Hardware GPIO Reference Map", MATERIAL_SYMBOLS_MEMORY, C_AMBER, -1, PAGE_PINLAB},
-        {"Kalkulator Sentuh", "Operasi Aritmatika & Desimal", MATERIAL_SYMBOLS_CALCULATE, C_CYAN, -1, PAGE_CALCULATOR},
-        {"Game Arcade", "Koleksi Game Retro", MATERIAL_SYMBOLS_SPORTS_ESPORTS, C_AMBER, -1, PAGE_APPS}
+        {"Radio Streaming", "Stasiun Live Musik & Berita", MATERIAL_SYMBOLS_HEADPHONES, GetAppIconColor(1, ICON_RADIO), -1, PAGE_RADIO},
+        {"Xiaozhi AI", "Percakapan Suara & Musik LLM", MATERIAL_SYMBOLS_ROBOT_2, GetAppIconColor(0, ICON_AI), 0, PAGE_AI},
+        {"Chronchi Watch", "Smartwatch, Kalender & Timer", MATERIAL_SYMBOLS_WATCH, GetAppIconColor(7, ICON_CHRONOS), 1, PAGE_HOME},
+        {"Beranda OS", "Dashboard Utama & Widget", MATERIAL_SYMBOLS_HOME, GetAppIconColor(2, ICON_HOME), -1, PAGE_HOME},
+        {"Chronos Pomodoro", "Timer Fokus 25 Menit", MATERIAL_SYMBOLS_SCHEDULE, GetAppIconColor(11, ICON_CHRONOS), -1, PAGE_CHRONOS},
+        {"Wi-Fi & Jaringan", "Pemindai SSID & Status IP", MATERIAL_SYMBOLS_WIFI, GetAppIconColor(8, ICON_WIFI), -1, PAGE_WIFI},
+        {"Tampilan & Layar", "Pengaturan Kecerahan Backlight", MATERIAL_SYMBOLS_BRIGHTNESS_6, GetAppIconColor(12, ICON_BRIGHTNESS), -1, PAGE_DISPLAY},
+        {"Audio & Suara", "Driver ES8311 & Amplifier", MATERIAL_SYMBOLS_VOLUME_UP, GetAppIconColor(9, ICON_AUDIO), -1, PAGE_AUDIO},
+        {"Baterai & Daya", "Pemantau ADC & Voltase TP4054", MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL, GetAppIconColor(13, ICON_BATTERY), -1, PAGE_BATTERY},
+        {"File Hub", "16MB Flash Storage & Partisi", MATERIAL_SYMBOLS_SD_CARD, GetAppIconColor(10, ICON_FILES), -1, PAGE_FILES},
+        {"Pengaturan Sistem", "Preferensi & Informasi Chip", MATERIAL_SYMBOLS_SETTINGS, GetAppIconColor(14, ICON_SETTINGS), -1, PAGE_SETTINGS},
+        {"Pin Lab", "Hardware GPIO Reference Map", MATERIAL_SYMBOLS_MEMORY, GetAppIconColor(17, ICON_CHIP), -1, PAGE_PINLAB},
+        {"Kalkulator Sentuh", "Operasi Aritmatika & Desimal", MATERIAL_SYMBOLS_CALCULATE, GetAppIconColor(15, ICON_CALC), -1, PAGE_CALCULATOR},
+        {"Game Arcade", "Koleksi Game Retro", MATERIAL_SYMBOLS_SPORTS_ESPORTS, GetAppIconColor(16, ICON_GAME), -1, PAGE_APPS}
     };
 
     const int total_items = sizeof(items) / sizeof(items[0]);
@@ -1222,7 +1225,7 @@ void NovaDisplay::BuildHome() {
         date_label_ = MakeLabel(time_card, date_text, 12, 48, 120, 16, FONT_10, C_MUTED);
 
         lv_obj_t* ai_card = MakePanel(root, 166, 48, 142, 72, C_PANEL, C_BORDER, 12);
-        MakeIcon(ai_card, ICON_AI, 8, 14, C_CYAN, 24);
+        MakeIcon(ai_card, ICON_AI, 8, 14, GetAppIconColor(0, ICON_AI), 24);
         MakeLabel(ai_card, "Xiaozhi AI", 36, 6, 100, 18, FONT_14, C_TEXT);
         MakeLabel(ai_card, "Asisten suara LLM", 36, 24, 100, 14, FONT_10, C_MUTED);
         MakeButton(ai_card, "BUKA ASISTEN", 36, 43, 98, 22, C_CYAN, C_CYAN, C_BG, FONT_10, OnLaunchAiVoice, this);
@@ -1231,7 +1234,7 @@ void NovaDisplay::BuildHome() {
         const int tile_x[] = {12, 114, 216};
         const char* tile_names[] = {"Wi-Fi", "Watch", "Apps"};
         const IconKind tile_icons[] = {ICON_WIFI, ICON_CHRONOS, ICON_APPS};
-        const lv_color_t tile_colors[] = {C_CYAN, C_AMBER, C_VIOLET};
+        const lv_color_t tile_colors[] = {GetAppIconColor(8, ICON_WIFI), GetAppIconColor(7, ICON_CHRONOS), GetAppIconColor(16, ICON_APPS)};
         for (int i = 0; i < 3; ++i) {
             lv_obj_t* tile = lv_btn_create(root);
             lv_obj_set_pos(tile, tile_x[i], 134);
@@ -1257,7 +1260,7 @@ void NovaDisplay::BuildHome() {
         date_label_ = MakeLabel(root, date_text, 17, 106, 207, 16, FONT_12, C_MUTED);
 
         lv_obj_t* ai_card = MakePanel(root, 12, 126, 216, 74, C_PANEL, C_BORDER, 14);
-        MakeIcon(ai_card, ICON_AI, 12, 15, C_CYAN, 28);
+        MakeIcon(ai_card, ICON_AI, 12, 15, GetAppIconColor(0, ICON_AI), 28);
         MakeLabel(ai_card, "Xiaozhi AI", 48, 7, 153, 22, FONT_14, C_TEXT);
         MakeLabel(ai_card, "Asisten suara LLM", 48, 28, 153, 16, FONT_10, C_MUTED);
         MakeButton(ai_card, "BUKA ASISTEN", 48, 47, 154, 22, C_CYAN, C_CYAN, C_BG, FONT_10, OnLaunchAiVoice, this);
@@ -1265,7 +1268,7 @@ void NovaDisplay::BuildHome() {
         const int tile_x[] = {12, 88, 164};
         const char* tile_names[] = {"Radio", "Watch", "Apps"};
         const IconKind tile_icons[] = {ICON_RADIO, ICON_CHRONOS, ICON_APPS};
-        const lv_color_t tile_colors[] = {C_MINT, C_AMBER, C_VIOLET};
+        const lv_color_t tile_colors[] = {GetAppIconColor(1, ICON_RADIO), GetAppIconColor(7, ICON_CHRONOS), GetAppIconColor(16, ICON_APPS)};
         for (int i = 0; i < 3; ++i) {
             lv_obj_t* tile = lv_btn_create(root);
             lv_obj_set_pos(tile, tile_x[i], 208);
@@ -1410,7 +1413,7 @@ void NovaDisplay::BuildApps() {
             lv_obj_set_size(tile, tile_w, tile_h);
             StyleButton(tile, C_PANEL, C_BORDER, 8);
 
-            MakeIcon(tile, kApps[i].icon, 11, 5, kApps[i].color, 24);
+            MakeIcon(tile, kApps[i].icon, 11, 5, GetAppIconColor(i, kApps[i].icon), 24);
             lv_obj_t* lbl = MakeCenteredLabel(tile, kApps[i].name, 0, 32, tile_w, 14, FONT_10, C_TEXT);
             lv_label_set_long_mode(lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
@@ -1442,43 +1445,43 @@ void NovaDisplay::BuildApps() {
         MakeLabel(list, "SEMUA APLIKASI", 14, 4, 212, 16, FONT_12, C_MUTED);
 
         // Row 1: Xiaozhi AI & Radio Streaming Live
-        AppTile(list, 12, 24, "Xiaozhi", "Asisten AI", ICON_AI, C_CYAN, PAGE_AI);
-        AppTile(list, 126, 24, "Radio Live", "Online Stream", ICON_RADIO, C_MINT, PAGE_RADIO);
+        AppTile(list, 12, 24, "Xiaozhi", "Asisten AI", ICON_AI, GetAppIconColor(0, ICON_AI), PAGE_AI);
+        AppTile(list, 126, 24, "Radio Live", "Online Stream", ICON_RADIO, GetAppIconColor(1, ICON_RADIO), PAGE_RADIO);
 
         // Row 2: Navigasi Google Maps & Musik HP
-        AppTile(list, 12, 84, "Navigasi", "Google Maps", ICON_NAV, C_MINT, PAGE_NAV);
-        AppTile(list, 126, 84, "Musik HP", "Remote Media", ICON_AUDIO, C_AMBER, PAGE_BT_MUSIC);
+        AppTile(list, 12, 84, "Navigasi", "Google Maps", ICON_NAV, GetAppIconColor(2, ICON_NAV), PAGE_NAV);
+        AppTile(list, 126, 84, "Musik HP", "Remote Media", ICON_AUDIO, GetAppIconColor(3, ICON_AUDIO), PAGE_BT_MUSIC);
 
         // Row 3: Notifikasi HP & Cuaca HP
-        AppTile(list, 12, 144, "Notif HP", "Pusat Pesan", ICON_CHAT, C_CYAN, PAGE_NOTIF);
-        AppTile(list, 126, 144, "Cuaca HP", "Info Cuaca", ICON_WEATHER, C_AMBER, PAGE_WEATHER);
+        AppTile(list, 12, 144, "Notif HP", "Pusat Pesan", ICON_CHAT, GetAppIconColor(4, ICON_CHAT), PAGE_NOTIF);
+        AppTile(list, 126, 144, "Cuaca HP", "Info Cuaca", ICON_WEATHER, GetAppIconColor(5, ICON_WEATHER), PAGE_WEATHER);
 
         // Row 4: Cari HP & Smartwatch Chronos
-        AppTile(list, 12, 204, "Cari HP", "Deringkan HP", ICON_PHONE, C_MINT, PAGE_PHONE);
-        ChronchiTile(list, 126, 204, "Smartwatch", "Jam & Wajah", ICON_CHRONOS, C_AMBER, 0);
+        AppTile(list, 12, 204, "Cari HP", "Deringkan HP", ICON_PHONE, GetAppIconColor(6, ICON_PHONE), PAGE_PHONE);
+        ChronchiTile(list, 126, 204, "Smartwatch", "Jam & Wajah", ICON_CHRONOS, GetAppIconColor(7, ICON_CHRONOS), 0);
 
         // Row 5
-        AppTile(list, 12, 264, "Wi-Fi", "Jaringan", ICON_WIFI, C_CYAN, PAGE_WIFI);
-        AppTile(list, 126, 264, "Audio", "Suara I/O", ICON_AUDIO, C_AMBER, PAGE_AUDIO);
+        AppTile(list, 12, 264, "Wi-Fi", "Jaringan", ICON_WIFI, GetAppIconColor(8, ICON_WIFI), PAGE_WIFI);
+        AppTile(list, 126, 264, "Audio", "Suara I/O", ICON_AUDIO, GetAppIconColor(9, ICON_AUDIO), PAGE_AUDIO);
 
         // Row 6
-        AppTile(list, 12, 324, "File Hub", "Berkas", ICON_FILES, C_VIOLET, PAGE_FILES);
-        AppTile(list, 126, 324, "Chronos", "Jam / fokus", ICON_CHRONOS, C_AMBER, PAGE_CHRONOS);
+        AppTile(list, 12, 324, "File Hub", "Berkas", ICON_FILES, GetAppIconColor(10, ICON_FILES), PAGE_FILES);
+        AppTile(list, 126, 324, "Chronos", "Jam / fokus", ICON_CHRONOS, GetAppIconColor(11, ICON_CHRONOS), PAGE_CHRONOS);
 
         // Row 7
-        AppTile(list, 12, 384, "Tampilan", "Kecerahan", ICON_BRIGHTNESS, C_AMBER, PAGE_DISPLAY);
-        AppTile(list, 126, 384, "Baterai", "Status daya", ICON_BATTERY, C_MINT, PAGE_BATTERY);
+        AppTile(list, 12, 384, "Tampilan", "Kecerahan", ICON_BRIGHTNESS, GetAppIconColor(12, ICON_BRIGHTNESS), PAGE_DISPLAY);
+        AppTile(list, 126, 384, "Baterai", "Status daya", ICON_BATTERY, GetAppIconColor(13, ICON_BATTERY), PAGE_BATTERY);
 
         // Row 8
-        AppTile(list, 12, 444, "Atur", "Sistem", ICON_SETTINGS, C_VIOLET, PAGE_SETTINGS);
-        AppTile(list, 126, 444, "Kalkulator", "Hitung cepat", ICON_CALC, C_CYAN, PAGE_CALCULATOR);
+        AppTile(list, 12, 444, "Atur", "Sistem", ICON_SETTINGS, GetAppIconColor(14, ICON_SETTINGS), PAGE_SETTINGS);
+        AppTile(list, 126, 444, "Kalkulator", "Hitung cepat", ICON_CALC, GetAppIconColor(15, ICON_CALC), PAGE_CALCULATOR);
 
         // Row 9
         lv_obj_t* game_tile = lv_btn_create(list);
         lv_obj_set_pos(game_tile, 12, 504);
         lv_obj_set_size(game_tile, 102, 54);
         StyleButton(game_tile, C_PANEL, C_BORDER, 12);
-        MakeIcon(game_tile, ICON_GAME, 8, 13, C_AMBER, 26);
+        MakeIcon(game_tile, ICON_GAME, 8, 13, GetAppIconColor(16, ICON_GAME), 26);
         lv_obj_t* g_name = MakeLabel(game_tile, "Game", 40, 7, 58, 19, FONT_14, C_TEXT);
         lv_label_set_long_mode(g_name, LV_LABEL_LONG_SCROLL_CIRCULAR);
         lv_obj_t* g_desc = MakeLabel(game_tile, "Koleksi Game", 40, 27, 58, 18, FONT_10, C_MUTED);
@@ -1488,15 +1491,15 @@ void NovaDisplay::BuildApps() {
             if (self) self->ShowGamesModal();
         }, LV_EVENT_CLICKED, this);
 
-        AppTile(list, 126, 504, "Pin Lab", "Hardware", ICON_CHIP, C_CYAN, PAGE_PINLAB);
+        AppTile(list, 126, 504, "Pin Lab", "Hardware", ICON_CHIP, GetAppIconColor(17, ICON_CHIP), PAGE_PINLAB);
 
         // Row 10
-        AppTile(list, 12, 564, "Pintasan", "Aksi Cepat", ICON_SETTINGS, C_CYAN, PAGE_QUICK);
-        AppTile(list, 126, 564, "Mini Piano", "Synthesizer", ICON_PIANO, C_CYAN, PAGE_PIANO);
+        AppTile(list, 12, 564, "Pintasan", "Aksi Cepat", ICON_SETTINGS, GetAppIconColor(18, ICON_SETTINGS), PAGE_QUICK);
+        AppTile(list, 126, 564, "Mini Piano", "Synthesizer", ICON_PIANO, GetAppIconColor(19, ICON_PIANO), PAGE_PIANO);
 
         // Row 11
-        AppTile(list, 12, 624, "Sketchpad", "Papan Gambar", ICON_DRAW, C_VIOLET, PAGE_SKETCH);
-        AppTile(list, 126, 624, "Monitor", "Task & CPU", ICON_DASHBOARD, C_MINT, PAGE_MONITOR);
+        AppTile(list, 12, 624, "Sketchpad", "Papan Gambar", ICON_DRAW, GetAppIconColor(20, ICON_DRAW), PAGE_SKETCH);
+        AppTile(list, 126, 624, "Monitor", "Task & CPU", ICON_DASHBOARD, GetAppIconColor(21, ICON_DASHBOARD), PAGE_MONITOR);
     }
 
     MakeBottomNav(root, PAGE_APPS);
@@ -1582,6 +1585,55 @@ void NovaDisplay::SetBatteryStyle(uint8_t style) {
     Settings prefs("nova", true);
     prefs.SetInt("bat_style", bat_style_);
     BuildCurrentPage();
+}
+
+void NovaDisplay::SetIconColorMode(uint8_t mode) {
+    if (mode > ICON_COLOR_THEME) mode = ICON_COLOR_MIXED;
+    icon_color_mode_ = mode;
+    Settings prefs("nova", true);
+    prefs.SetInt("icon_mode", icon_color_mode_);
+}
+
+lv_color_t NovaDisplay::GetAppIconColor(int index, IconKind kind) {
+    if (icon_color_mode_ == ICON_COLOR_THEME) {
+        return C_CYAN;
+    }
+
+    static const uint32_t VIBRANT_PALETTE[] = {
+        0x00E5FF, // 0: Electric Cyan (Xiaozhi AI)
+        0x10B981, // 1: Neon Emerald (Radio Live)
+        0x3B82F6, // 2: Royal Blue (Google Maps Nav)
+        0xEC4899, // 3: Hot Pink (Musik HP)
+        0x22C55E, // 4: WhatsApp Lime Green (Notif HP)
+        0xF59E0B, // 5: Sunflower Amber (Cuaca HP)
+        0xEF4444, // 6: Coral Crimson (Cari HP)
+        0x8B5CF6, // 7: Cyber Violet (Smartwatch)
+        0x06B6D4, // 8: Turquoise Cyan (Wi-Fi)
+        0xF97316, // 9: Sunset Orange (Audio I/O)
+        0xEAB308, // 10: Golden Yellow (File Hub)
+        0x6366F1, // 11: Neon Indigo (Chronos)
+        0xFBBF24, // 12: Bright Amber (Tampilan)
+        0x84CC16, // 13: Fresh Lime (Baterai)
+        0xD946EF, // 14: Orchid Fuchsia (Atur Sistem)
+        0x0EA5E9, // 15: Sky Blue (Kalkulator)
+        0xFF5722, // 16: Flame Tangerine (Game Arcade)
+        0xA855F7, // 17: Electric Purple (Pin Lab)
+        0x14B8A6, // 18: Teal Aqua (Pintasan)
+        0xF43F5E, // 19: Electric Rose (Mini Piano)
+        0xFB7185, // 20: Pastel Coral (Sketchpad)
+        0x2DD4BF  // 21: Mint Teal (Monitor CPU)
+    };
+    constexpr size_t PALETTE_SZ = sizeof(VIBRANT_PALETTE) / sizeof(VIBRANT_PALETTE[0]);
+
+    if (icon_color_mode_ == ICON_COLOR_RANDOM) {
+        uint32_t seed = (uint32_t)(esp_timer_get_time() / 1000000) * 7 + (uint32_t)index * 5 + (uint32_t)kind * 3;
+        return lv_color_hex(VIBRANT_PALETTE[seed % PALETTE_SZ]);
+    }
+
+    if (index >= 0 && index < (int)PALETTE_SZ) {
+        return lv_color_hex(VIBRANT_PALETTE[index]);
+    }
+    return lv_color_hex(VIBRANT_PALETTE[((size_t)kind + (size_t)index) % PALETTE_SZ]);
 }
 
 static void OnMuteTileClicked(lv_event_t* event) {
@@ -1724,6 +1776,9 @@ void NovaDisplay::BuildQuick() {
 }
 
 void NovaDisplay::StartWifiScan() {
+    if (scan_state_ == 0) {
+        return;
+    }
     scan_state_ = 0;
     wifi_message_ = "Sedang memindai jaringan...";
     scanned_aps_.clear();
@@ -1731,44 +1786,137 @@ void NovaDisplay::StartWifiScan() {
 
     xTaskCreate([](void* arg) {
         auto* self = static_cast<NovaDisplay*>(arg);
-        esp_wifi_set_ps(WIFI_PS_NONE);
-        wifi_scan_config_t scan_cfg = {};
-        scan_cfg.show_hidden = false;
-        esp_err_t err = esp_wifi_scan_start(&scan_cfg, true);
-
-        uint16_t ap_count = 0;
-        if (err == ESP_OK) {
-            esp_wifi_scan_get_ap_num(&ap_count);
-        }
         std::vector<ScannedAp> results;
-        if (ap_count > 0) {
-            std::vector<wifi_ap_record_t> records(ap_count);
-            esp_wifi_scan_get_ap_records(&ap_count, records.data());
-            for (uint16_t i = 0; i < ap_count && i < 20; ++i) {
-                if (records[i].ssid[0] != '\0') {
-                    ScannedAp ap;
-                    ap.ssid = (char*)records[i].ssid;
-                    ap.rssi = records[i].rssi;
-                    ap.open = (records[i].authmode == WIFI_AUTH_OPEN);
-                    results.push_back(ap);
+        auto add_or_update_ap = [&results](const std::string& ssid, int rssi, bool open) {
+            if (ssid.empty()) return;
+            for (auto& existing : results) {
+                if (existing.ssid == ssid) {
+                    if (rssi > existing.rssi) {
+                        existing.rssi = rssi;
+                        existing.open = open;
+                    }
+                    return;
                 }
+            }
+            ScannedAp ap;
+            ap.ssid = ssid;
+            ap.rssi = rssi;
+            ap.open = open;
+            results.push_back(std::move(ap));
+        };
+
+        auto& mgr = WifiManager::GetInstance();
+        if (mgr.IsInitialized() && mgr.IsConfigMode()) {
+            // In Config AP mode, WifiConfigurationAp consumes WIFI_EVENT_SCAN_DONE
+            // and caches scanned APs behind http://192.168.4.1/scan.
+            auto* network = Board::GetInstance().GetNetwork();
+            for (int attempt = 0; attempt < 4 && results.empty(); ++attempt) {
+                if (attempt > 0) {
+                    vTaskDelay(pdMS_TO_TICKS(1200));
+                }
+                if (network) {
+                    auto http = network->CreateHttp(0);
+                    if (http) {
+                        http->SetTimeout(4000);
+                        if (http->Open("GET", "http://192.168.4.1/scan")) {
+                            if (http->GetStatusCode() == 200) {
+                                std::string body = http->ReadAll();
+                                cJSON* root = cJSON_Parse(body.c_str());
+                                if (root) {
+                                    cJSON* aps = cJSON_GetObjectItem(root, "aps");
+                                    if (cJSON_IsArray(aps)) {
+                                        cJSON* item = nullptr;
+                                        cJSON_ArrayForEach(item, aps) {
+                                            cJSON* j_ssid = cJSON_GetObjectItem(item, "ssid");
+                                            cJSON* j_rssi = cJSON_GetObjectItem(item, "rssi");
+                                            cJSON* j_auth = cJSON_GetObjectItem(item, "authmode");
+                                            if (cJSON_IsString(j_ssid) && j_ssid->valuestring && j_ssid->valuestring[0] != '\0') {
+                                                int rssi = cJSON_IsNumber(j_rssi) ? j_rssi->valueint : -75;
+                                                bool open = cJSON_IsNumber(j_auth) ? (j_auth->valueint == WIFI_AUTH_OPEN) : false;
+                                                add_or_update_ap(j_ssid->valuestring, rssi, open);
+                                            }
+                                        }
+                                    }
+                                    cJSON_Delete(root);
+                                }
+                            }
+                            http->Close();
+                        }
+                    }
+                }
+            }
+            ESP_LOGI(TAG, "Config AP /scan returned %d AP(s)", (int)results.size());
+        } else {
+            // Stop WifiStation temporarily so its WIFI_EVENT_SCAN_DONE handler
+            // neither drains esp_wifi_scan_get_ap_records() nor calls esp_wifi_connect().
+            bool was_initialized = mgr.IsInitialized();
+            bool was_connected = was_initialized && mgr.IsConnected();
+            bool has_saved = !SsidManager::GetInstance().GetSsidList().empty();
+
+            if (was_initialized) {
+                mgr.StopStation();
+                vTaskDelay(pdMS_TO_TICKS(120));
+            } else {
+                WifiManagerConfig cfg;
+                cfg.ssid_prefix = "Xiaozhi";
+                mgr.Initialize(cfg);
+            }
+
+            wifi_mode_t mode = WIFI_MODE_NULL;
+            if (esp_wifi_get_mode(&mode) != ESP_OK || mode == WIFI_MODE_NULL) {
+                esp_wifi_set_mode(WIFI_MODE_STA);
+            } else if (mode == WIFI_MODE_AP) {
+                esp_wifi_set_mode(WIFI_MODE_APSTA);
+            }
+            esp_wifi_start();
+            esp_wifi_set_ps(WIFI_PS_NONE);
+
+            wifi_scan_config_t scan_cfg = {};
+            scan_cfg.show_hidden = false;
+            esp_err_t err = esp_wifi_scan_start(&scan_cfg, true);
+            if (err == ESP_ERR_WIFI_STATE) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+                err = esp_wifi_scan_start(&scan_cfg, true);
+            }
+
+            uint16_t ap_count = 0;
+            if (err == ESP_OK) {
+                esp_wifi_scan_get_ap_num(&ap_count);
+            } else {
+                ESP_LOGW(TAG, "esp_wifi_scan_start failed: %s", esp_err_to_name(err));
+            }
+            if (ap_count > 0) {
+                std::vector<wifi_ap_record_t> records(ap_count);
+                if (esp_wifi_scan_get_ap_records(&ap_count, records.data()) == ESP_OK) {
+                    for (uint16_t i = 0; i < ap_count && i < 20; ++i) {
+                        if (records[i].ssid[0] != '\0') {
+                            add_or_update_ap((char*)records[i].ssid, records[i].rssi, records[i].authmode == WIFI_AUTH_OPEN);
+                        }
+                    }
+                }
+            }
+            ESP_LOGI(TAG, "STA Wi-Fi scan found %d AP(s)", (int)results.size());
+
+            if (was_connected || (was_initialized && has_saved)) {
+                mgr.StartStation();
+            } else {
+                esp_wifi_stop();
             }
         }
 
         // Tampilkan juga jaringan yang tersimpan di SsidManager agar mudah dipilih
         const auto& saved_list = SsidManager::GetInstance().GetSsidList();
         for (const auto& item : saved_list) {
-            bool exists = false;
-            for (const auto& r : results) {
-                if (r.ssid == item.ssid) { exists = true; break; }
+            if (!item.ssid.empty()) {
+                add_or_update_ap(item.ssid, -60, item.password.empty());
             }
-            if (!exists && !item.ssid.empty()) {
-                ScannedAp saved_ap;
-                saved_ap.ssid = item.ssid;
-                saved_ap.rssi = -60; // indikasi sinyal tersimpan
-                saved_ap.open = item.password.empty();
-                results.push_back(saved_ap);
-            }
+        }
+
+        std::sort(results.begin(), results.end(), [](const ScannedAp& a, const ScannedAp& b) {
+            return a.rssi > b.rssi;
+        });
+        if (results.size() > 20) {
+            results.resize(20);
         }
 
         lvgl_port_lock(0);
@@ -1781,7 +1929,7 @@ void NovaDisplay::StartWifiScan() {
         lvgl_port_unlock();
 
         vTaskDelete(NULL);
-    }, "nova_wifi_scan", 4096, this, 3, NULL);
+    }, "nova_wifi_scan", 6144, this, 3, NULL);
 }
 
 void NovaDisplay::ConnectWifi(const std::string& ssid, const std::string& password) {
@@ -2932,13 +3080,15 @@ void NovaDisplay::BuildWifi() {
     esp_netif_ip_info_t ip_info;
     esp_netif_t* sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     bool connected = (sta_netif && esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0);
+    auto& mgr = WifiManager::GetInstance();
+    bool config_mode = mgr.IsInitialized() && mgr.IsConfigMode();
 
     if (width_ > 240) {
         // === RESPONSIVE LANDSCAPE LAYOUT (320x240) ===
         // Left Column (x=10, w=146): Status & Action Buttons
         lv_obj_t* scard = MakePanel(root, 10, 40, 146, 44, C_PANEL, C_BORDER, 8);
-        MakeIcon(scard, ICON_WIFI, 8, 10, connected ? C_MINT : C_AMBER, 22);
-        MakeLabel(scard, connected ? "Terhubung" : "Menghubungkan...", 36, 4, 104, 16, FONT_12, C_TEXT);
+        MakeIcon(scard, ICON_WIFI, 8, 10, connected ? C_MINT : (config_mode ? C_CYAN : C_AMBER), 22);
+        MakeLabel(scard, connected ? "Terhubung" : (config_mode ? "Hotspot Aktif" : "Menghubungkan..."), 36, 4, 104, 16, FONT_12, C_TEXT);
 
         if (connected) {
             char ip_str[32] = "";
@@ -2946,6 +3096,11 @@ void NovaDisplay::BuildWifi() {
             wifi_ap_record_t ap_rec;
             std::string ssid = (esp_wifi_sta_get_ap_info(&ap_rec) == ESP_OK) ? (char*)ap_rec.ssid : "Wi-Fi";
             std::string details = ssid + " | " + ip_str;
+            wifi_status_label_ = MakeLabel(scard, details.c_str(), 36, 22, 104, 14, FONT_10, C_CYAN);
+        } else if (config_mode) {
+            std::string ap_name = mgr.GetApSsid();
+            if (ap_name.empty()) ap_name = "Xiaozhi AP";
+            std::string details = ap_name + " | 192.168.4.1";
             wifi_status_label_ = MakeLabel(scard, details.c_str(), 36, 22, 104, 14, FONT_10, C_CYAN);
         } else {
             wifi_status_label_ = MakeLabel(scard, "Wi-Fi Terputus", 36, 22, 104, 14, FONT_10, lv_color_hex(0xF59E0B));
@@ -3030,8 +3185,8 @@ void NovaDisplay::BuildWifi() {
     } else {
         // === PORTRAIT LAYOUT (240x320) ===
         lv_obj_t* scard = MakePanel(root, 12, 42, 216, 48, C_PANEL, C_BORDER, 10);
-        MakeIcon(scard, ICON_WIFI, 10, 11, connected ? C_MINT : C_AMBER, 25);
-        MakeLabel(scard, connected ? "Terhubung" : "Menghubungkan...", 44, 5, 157, 18, FONT_14, C_TEXT);
+        MakeIcon(scard, ICON_WIFI, 10, 11, connected ? C_MINT : (config_mode ? C_CYAN : C_AMBER), 25);
+        MakeLabel(scard, connected ? "Terhubung" : (config_mode ? "Hotspot Aktif" : "Menghubungkan..."), 44, 5, 157, 18, FONT_14, C_TEXT);
 
         if (connected) {
             char ip_str[32] = "";
@@ -3039,6 +3194,11 @@ void NovaDisplay::BuildWifi() {
             wifi_ap_record_t ap_rec;
             std::string ssid = (esp_wifi_sta_get_ap_info(&ap_rec) == ESP_OK) ? (char*)ap_rec.ssid : "Wi-Fi";
             std::string details = ssid + "  |  " + ip_str;
+            wifi_status_label_ = MakeLabel(scard, details.c_str(), 44, 25, 160, 18, FONT_10, C_CYAN);
+        } else if (config_mode) {
+            std::string ap_name = mgr.GetApSsid();
+            if (ap_name.empty()) ap_name = "Xiaozhi AP";
+            std::string details = ap_name + "  |  192.168.4.1";
             wifi_status_label_ = MakeLabel(scard, details.c_str(), 44, 25, 160, 18, FONT_10, C_CYAN);
         } else {
             wifi_status_label_ = MakeLabel(scard, "Menghubungkan kembali...", 44, 25, 160, 18, FONT_10, lv_color_hex(0xF59E0B));
@@ -3301,6 +3461,16 @@ void NovaDisplay::BuildDisplay() {
         if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
     };
 
+    auto on_icon_mode_click = [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (!self) return;
+        int m = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        self->SetIconColorMode((uint8_t)m);
+        if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+        self->BuildDisplay();
+    };
+
     auto make_level_button = [&](lv_obj_t* p, const char* label, int x, int y, int w, int h, bool active, lv_event_cb_t cb, int val) {
         lv_color_t fill = active ? C_CYAN : C_PANEL;
         lv_color_t border = active ? C_CYAN : C_BORDER;
@@ -3538,6 +3708,12 @@ void NovaDisplay::BuildDisplay() {
         make_level_button(right_list, "STND", 39, 286, 35, 22, cur_sharpness == 1, on_sharpness_click, 1);
         make_level_button(right_list, "TAJM", 76, 286, 36, 22, cur_sharpness == 2, on_sharpness_click, 2);
         make_level_button(right_list, "EKST", 114, 286, 36, 22, cur_sharpness == 3, on_sharpness_click, 3);
+
+        // 7. Icon Color Mode (Warna Ikon Aplikasi)
+        MakeLabel(right_list, "WARNA IKON APLIKASI", 2, 312, 148, 14, FONT_10, C_MUTED);
+        make_level_button(right_list, "CMPR", 2, 326, 46, 22, icon_color_mode_ == ICON_COLOR_MIXED, on_icon_mode_click, ICON_COLOR_MIXED);
+        make_level_button(right_list, "ACAK", 51, 326, 46, 22, icon_color_mode_ == ICON_COLOR_RANDOM, on_icon_mode_click, ICON_COLOR_RANDOM);
+        make_level_button(right_list, "TEMA", 100, 326, 46, 22, icon_color_mode_ == ICON_COLOR_THEME, on_icon_mode_click, ICON_COLOR_THEME);
 
     } else {
         // === PORTRAIT LAYOUT (240x320) WITH SMOOTH SCROLLING ===
@@ -3799,8 +3975,14 @@ void NovaDisplay::BuildDisplay() {
         make_level_button(list, "TAJAM", 124, 560, 48, 28, cur_sharpness == 2, on_sharpness_click, 2);
         make_level_button(list, "EKSTREM", 180, 560, 48, 28, cur_sharpness == 3, on_sharpness_click, 3);
 
-        // Section 7: Screen Rotation Button
-        MakeButton(list, "ROTASI LAYAR 90°", 12, 600, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        // Section 7: Icon Color Mode (Warna Ikon Aplikasi)
+        MakeLabel(list, "WARNA IKON APLIKASI", 14, 596, 212, 14, FONT_10, C_MUTED);
+        make_level_button(list, "CAMPURAN", 12, 612, 68, 28, icon_color_mode_ == ICON_COLOR_MIXED, on_icon_mode_click, ICON_COLOR_MIXED);
+        make_level_button(list, "ACAK",     84, 612, 68, 28, icon_color_mode_ == ICON_COLOR_RANDOM, on_icon_mode_click, ICON_COLOR_RANDOM);
+        make_level_button(list, "TEMA",     156, 612, 68, 28, icon_color_mode_ == ICON_COLOR_THEME, on_icon_mode_click, ICON_COLOR_THEME);
+
+        // Section 8: Screen Rotation Button
+        MakeButton(list, "ROTASI LAYAR 90°", 12, 652, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
             [](lv_event_t* e) {
                 (void)e;
                 Board::GetInstance().RotateDisplay();
@@ -5782,12 +5964,19 @@ void NovaDisplay::UpdateLiveLabels() {
     }
 
     if (wifi_status_label_) {
+        auto& mgr = WifiManager::GetInstance();
         if (wifi_connected) {
             char ip_str[32] = "";
             esp_ip4addr_ntoa(&ip_info.ip, ip_str, sizeof(ip_str));
             wifi_ap_record_t ap_rec;
             std::string ssid = (esp_wifi_sta_get_ap_info(&ap_rec) == ESP_OK) ? (char*)ap_rec.ssid : "Wi-Fi";
             std::string details = ssid + "  |  " + ip_str;
+            lv_label_set_text(wifi_status_label_, details.c_str());
+            lv_obj_set_style_text_color(wifi_status_label_, C_CYAN, LV_PART_MAIN);
+        } else if (mgr.IsInitialized() && mgr.IsConfigMode()) {
+            std::string ap_name = mgr.GetApSsid();
+            if (ap_name.empty()) ap_name = "Xiaozhi AP";
+            std::string details = ap_name + "  |  192.168.4.1";
             lv_label_set_text(wifi_status_label_, details.c_str());
             lv_obj_set_style_text_color(wifi_status_label_, C_CYAN, LV_PART_MAIN);
         } else {

@@ -1464,7 +1464,10 @@ private:
 
     virtual void OnNetworkEvent(NetworkEvent event, const std::string& data = "") override {
         WifiBoard::OnNetworkEvent(event, data);
-        if (event == NetworkEvent::Connected) {
+        if (event == NetworkEvent::WifiConfigModeEnter) {
+            // Ensure maximum Wi-Fi TX Power (20 dBm = 80 in 0.25 dBm units) for SoftAP visibility
+            esp_wifi_set_max_tx_power(80);
+        } else if (event == NetworkEvent::Connected) {
             // Ensure maximum Wi-Fi TX Power (20 dBm = 80 in 0.25 dBm units)
             esp_wifi_set_max_tx_power(80);
             // Inisialisasi Zona Waktu Sistem (Default: WIB UTC+7 / Indonesia Bagian Barat)

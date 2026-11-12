@@ -2333,8 +2333,9 @@ void LcdDisplay::ShowRecentAppsModal() {
     };
 
     const AppCardItem items[] = {
-        {"Nova Mini OS", "Beranda & Dashboard HP", MATERIAL_SYMBOLS_HOME, lv_color_hex(0x06B6D4), 2},
-        {"Xiaozhi AI", "Asisten Suara [Sedang Aktif]", MATERIAL_SYMBOLS_ROBOT_2, lv_color_hex(0x22C55E), 0},
+        {"Nova Mini OS", "Beranda & Dashboard HP", MATERIAL_SYMBOLS_HOME, lv_color_hex(0x00E5FF), 2},
+        {"Xiaozhi AI", "Asisten Suara [Sedang Aktif]", MATERIAL_SYMBOLS_ROBOT_2, lv_color_hex(0x10B981), 0},
+        {"Radio Streaming", "Stasiun Musik Online & Live", MATERIAL_SYMBOLS_HEADPHONES, lv_color_hex(0xEC4899), 2},
         {"Chronchi Watch", "Smartwatch & Kalender Pintar", MATERIAL_SYMBOLS_WATCH, lv_color_hex(0xF59E0B), 1},
         {"Control Center", "Pengaturan Cepat, Kecerahan & Vol", MATERIAL_SYMBOLS_SETTINGS, lv_color_hex(0xA855F7), 3}
     };
