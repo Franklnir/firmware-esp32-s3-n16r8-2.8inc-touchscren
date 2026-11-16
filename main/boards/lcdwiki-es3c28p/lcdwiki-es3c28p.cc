@@ -2790,7 +2790,7 @@ public:
             auto* self = static_cast<LCDWikiES3C28P_Board*>(arg);
             self->HapticClickTask();
             vTaskDelete(NULL);
-        }, "haptic_click", 4096, this, 4, &haptic_task_handle_, 1);
+        }, "haptic_click", 2048, this, 4, &haptic_task_handle_, 1);
 
         InitializeTemperatureSensor();
         InitializeButtons();
