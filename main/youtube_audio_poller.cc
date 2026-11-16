@@ -158,7 +158,7 @@ void YouTubeAudioPoller::Start() {
         task_handle_ = xTaskCreateStatic([](void* arg) {
             static_cast<YouTubeAudioPoller*>(arg)->TaskLoop();
             vTaskDelete(NULL);
-        }, "yt_poller", stack_size, this, 2, task_stack_, task_buffer_);
+        }, "yt_poller", stack_size / sizeof(StackType_t), this, 2, task_stack_, task_buffer_);
         ESP_LOGI(TAG, "YouTubeAudioPoller started (PSRAM stack: 32KB)");
     } else {
         xTaskCreate([](void* arg) {

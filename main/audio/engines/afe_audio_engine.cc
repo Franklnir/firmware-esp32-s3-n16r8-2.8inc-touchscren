@@ -196,10 +196,11 @@ bool AfeAudioEngine::Initialize(AudioCodec* codec, int frame_duration_ms, srmode
 
     // Pre-allocate task stack and buffer from internal SRAM BEFORE create_from_config
     // consumes the remaining contiguous internal SRAM.
-    const size_t processing_stack_size = 4096;
+    const size_t processing_stack_bytes = 4096;
+    const uint32_t processing_stack_words = processing_stack_bytes / sizeof(StackType_t);
     if (processing_task_stack_ == nullptr) {
         processing_task_stack_ = static_cast<StackType_t*>(
-            heap_caps_malloc(processing_stack_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+            heap_caps_malloc(processing_stack_bytes, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     }
     if (processing_task_buffer_ == nullptr) {
         processing_task_buffer_ = static_cast<StaticTask_t*>(
@@ -232,13 +233,13 @@ bool AfeAudioEngine::Initialize(AudioCodec* codec, int frame_duration_ms, srmode
             auto* engine = static_cast<AfeAudioEngine*>(arg);
             engine->ProcessingTask();
             vTaskDelete(nullptr);
-        }, "audio_afe", processing_stack_size, this, 3, processing_task_stack_, processing_task_buffer_);
+        }, "audio_afe", processing_stack_words, this, 3, processing_task_stack_, processing_task_buffer_);
     } else {
         BaseType_t task_created = xTaskCreate([](void* arg) {
             auto* engine = static_cast<AfeAudioEngine*>(arg);
             engine->ProcessingTask();
             vTaskDelete(nullptr);
-        }, "audio_afe", 4096, this, 3, &processing_task_);
+        }, "audio_afe", 1024, this, 3, &processing_task_);
         if (task_created != pdPASS) {
             processing_task_ = nullptr;
         }
@@ -623,7 +624,7 @@ void AfeAudioEngine::EncodeWakeWordData() {
             engine->wake_word_cv_.notify_all();
         }
         vTaskDelete(nullptr);
-    }, "encode_wake_word", stack_size, this, 2,
+    }, "encode_wake_word", stack_size / sizeof(StackType_t), this, 2,
         wake_word_encode_task_stack_, wake_word_encode_task_buffer_);
 }
 
