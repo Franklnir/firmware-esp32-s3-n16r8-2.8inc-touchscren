@@ -968,7 +968,6 @@ void LcdDisplay::SetupUI_Theme2() {
     CreateControlCenter();
     CreateDirectOverlays();
     CreateIdleDashboard();
-    SetChatMessage_Theme2("assistant", "Mode Chat WhatsApp aktif. Silakan bicara untuk mengobrol!");
 }
 #if CONFIG_IDF_TARGET_ESP32P4
 #define MAX_MESSAGES 40
