@@ -16,7 +16,7 @@
                 "CONFIG_BT_BLE_50_FEATURES_SUPPORTED=n",
                 "CONFIG_BT_ACL_CONNECTIONS=2",
                 "CONFIG_BT_CTRL_BLE_MAX_ACT=3",
-                "CONFIG_LV_USE_LODEPNG=n",
+                "CONFIG_LV_USE_LODEPNG=y",
                 "CONFIG_LV_FONT_MONTSERRAT_10=y",
                 "CONFIG_LV_FONT_MONTSERRAT_12=y",
                 "CONFIG_LV_FONT_MONTSERRAT_48=n",

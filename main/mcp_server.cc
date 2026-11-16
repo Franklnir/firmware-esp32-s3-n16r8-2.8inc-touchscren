@@ -114,7 +114,7 @@ void McpServer::AddCommonTools() {
             "Args:\n"
             "  `theme_id`: (Opsional) Angka tema yang diinginkan (1 untuk Thema 1 Default Robot, 2 untuk Thema 2 Chat Bubble). Jika 0 atau tidak ditentukan, akan otomatis beralih ke tema berikutnya.",
             PropertyList({
-                Property("theme_id", kPropertyTypeInteger, 0, 2)
+                Property("theme_id", kPropertyTypeInteger, 0, 0, 2)
             }),
             [display](const PropertyList& properties) -> ReturnValue {
                 int cur = display->GetUiThemeId();
@@ -199,7 +199,12 @@ void McpServer::AddCommonTools() {
                 int target_id = 2; // Default to Tema 2 (Chat WhatsApp)
                 if (t_lower == "1" || t_lower == "tema 1" || t_lower == "thema 1" || t_lower == "theme 1" ||
                     t_lower == "tampilan 1" || t_lower == "default" || t_lower == "robot" || t_lower == "satu" ||
-                    t_lower.find("tema 1") != std::string::npos || t_lower.find("robot") != std::string::npos) {
+                    t_lower.find("tema 1") != std::string::npos ||
+                    t_lower.find("thema 1") != std::string::npos ||
+                    t_lower.find("theme 1") != std::string::npos ||
+                    t_lower.find("tema satu") != std::string::npos ||
+                    t_lower.find("thema satu") != std::string::npos ||
+                    t_lower.find("robot") != std::string::npos) {
                     target_id = 1;
                 } else if (t_lower == "switch" || t_lower == "toggle" || t_lower == "ganti" || t_lower.empty() ||
                            t_lower == "ganti tema" || t_lower == "ganti thema" || t_lower == "next") {

@@ -2,6 +2,8 @@ import os
 import sys
 import time
 import subprocess
+import json
+from pathlib import Path
 import serial.tools.list_ports as lp
 
 def get_ports():
@@ -19,21 +21,33 @@ print("=== XiaoZhi ESP32-S3 Auto-Flasher ===", flush=True)
 print("Standby menunggu koneksi USB ESP32...", flush=True)
 print("-----------------------------------------------------------------", flush=True)
 
-xiaozhi_path = os.path.abspath('build/xiaozhi.bin')
-merged_path = os.path.abspath('build/merged-binary.bin')
+build_dir = Path(__file__).resolve().parent / 'build'
+try:
+    manifest = json.loads((build_dir / 'flasher_args.json').read_text())
+    if manifest['extra_esptool_args']['chip'] != 'esp32s3':
+        raise ValueError('Build ini bukan untuk ESP32-S3.')
+    assets = manifest.get('assets')
+    if not assets or manifest['flash_files'].get(assets['offset']) != assets['file']:
+        raise ValueError('Build tidak menyertakan assets.bin. Build ulang dengan aset aktif.')
+    flash_files = []
+    for offset, filename in sorted(manifest['flash_files'].items(), key=lambda item: int(item[0], 0)):
+        path = (build_dir / filename).resolve()
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f'File flash tidak ada atau kosong: {path}')
+        flash_files.extend([offset, str(path)])
+        print(f'{offset}: {path.name} ({path.stat().st_size} bytes)', flush=True)
+except (OSError, KeyError, ValueError) as error:
+    sys.exit(f'Paket flash tidak valid: {error}')
 
-if os.path.exists(merged_path) and os.path.getmtime(merged_path) >= os.path.getmtime(xiaozhi_path):
-    bin_path = merged_path
-    offset = "0x0"
-else:
-    bin_path = xiaozhi_path
-    offset = "0x20000"
+if '--dry-run' in sys.argv:
+    print('Pemeriksaan file selesai; firmware dan aset akan di-flash bersama. USB tidak ditulis.')
+    sys.exit(0)
 
-print(f"File biner siap: {bin_path} ({os.path.getsize(bin_path)} bytes)", flush=True)
+requested_port = sys.argv[1] if len(sys.argv) > 1 else None
 
 success = False
 for attempt in range(1, 601):
-    candidate_ports = get_ports()
+    candidate_ports = [(requested_port, 'port pilihan')] if requested_port else get_ports()
     if not candidate_ports:
         if attempt % 10 == 0:
             print(f"\n[Menunggu USB - {attempt}/600] Silakan colokkan kabel data USB ESP32...", flush=True)
@@ -57,10 +71,11 @@ for attempt in range(1, 601):
             "--before", "default_reset",
             "--after", "hard_reset",
             "write_flash",
-            offset, bin_path
+            *manifest['write_flash_args'],
+            *flash_files
         ]
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        if "Hash of data verified." in res.stdout or "Leaving... Hard resetting" in res.stdout:
+        if res.returncode == 0:
             print(f"\n==========================================", flush=True)
             print(f">>> FLASHING SELESAI 100%! <<<", flush=True)
             print(f"==========================================\n", flush=True)
