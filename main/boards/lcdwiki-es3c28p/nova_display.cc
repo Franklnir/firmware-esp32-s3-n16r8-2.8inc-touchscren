@@ -89,6 +89,7 @@ static lv_color_t C_DARK     = lv_color_hex(0x0D1728);
 NovaDisplay::NovaDisplay(const NovaCallbacks& callbacks)
     : callbacks_(callbacks) {
     Settings disp("display", true);
+    header_icon_color_ = (uint32_t)disp.GetInt("hdr_icon_clr", 0xFFFFFF);
     int b_pct = disp.GetInt("brightness", -1);
     Settings prefs("nova", true);
     if (b_pct >= 0 && b_pct <= 100) {
@@ -285,6 +286,25 @@ void NovaDisplay::UpdateResolvedTextColor() {
     ResolveEffectiveTextColor(lv_color_to_int(C_BG), text_hex, muted_hex);
     C_TEXT = lv_color_hex(text_hex);
     C_MUTED = lv_color_hex(muted_hex);
+}
+
+void NovaDisplay::ApplyHeaderIconColor(uint32_t color_hex, bool persist) {
+    header_icon_color_ = color_hex;
+    if (persist) {
+        Settings disp("display", true);
+        disp.SetInt("hdr_icon_clr", (int)color_hex);
+    }
+    lv_color_t c = lv_color_hex(header_icon_color_);
+    if (top_back_icon_) lv_obj_set_style_text_color(top_back_icon_, c, LV_PART_MAIN);
+    if (top_rot_icon_) lv_obj_set_style_text_color(top_rot_icon_, c, LV_PART_MAIN);
+    if (top_br_icon_) lv_obj_set_style_text_color(top_br_icon_, c, LV_PART_MAIN);
+    if (top_bluetooth_icon_) lv_obj_set_style_text_color(top_bluetooth_icon_, c, LV_PART_MAIN);
+    if (top_notif_icon_) lv_obj_set_style_text_color(top_notif_icon_, c, LV_PART_MAIN);
+    if (top_notif_label_) lv_obj_set_style_text_color(top_notif_label_, c, LV_PART_MAIN);
+    if (top_mute_icon_) lv_obj_set_style_text_color(top_mute_icon_, c, LV_PART_MAIN);
+    if (top_wifi_icon_) lv_obj_set_style_text_color(top_wifi_icon_, c, LV_PART_MAIN);
+    if (top_battery_icon_) lv_obj_set_style_text_color(top_battery_icon_, c, LV_PART_MAIN);
+    if (top_battery_label_) lv_obj_set_style_text_color(top_battery_label_, c, LV_PART_MAIN);
 }
 
 void NovaDisplay::ApplyTextColor(const std::string& text_color_id, bool persist) {
@@ -579,100 +599,105 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
     lv_obj_set_style_radius(bar, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(bar, 0, LV_PART_MAIN);
 
+    lv_color_t icon_clr = lv_color_hex(header_icon_color_);
+
     int title_x = 8;
     int title_w = 110;
 
     if (show_back) {
         lv_obj_t* back_btn = lv_btn_create(bar);
-        lv_obj_set_pos(back_btn, 4, 3);
-        lv_obj_set_size(back_btn, 28, 28);
-        StyleButton(back_btn, C_PANEL, C_BORDER, 8);
-        lv_obj_t* back_icon = lv_label_create(back_btn);
-        lv_label_set_text(back_icon, MATERIAL_SYMBOLS_ARROW_BACK);
-        lv_obj_set_style_text_font(back_icon, FONT_ICON, LV_PART_MAIN);
-        lv_obj_set_style_text_color(back_icon, C_CYAN, LV_PART_MAIN);
-        lv_obj_center(back_icon);
+        lv_obj_set_pos(back_btn, 6, 6);
+        lv_obj_set_size(back_btn, 24, 24);
+        StyleButton(back_btn, C_PANEL, C_BORDER, 6);
+        lv_obj_set_style_pad_all(back_btn, 0, LV_PART_MAIN);
+        top_back_icon_ = lv_label_create(back_btn);
+        lv_label_set_text(top_back_icon_, MATERIAL_SYMBOLS_ARROW_BACK);
+        lv_obj_set_style_text_font(top_back_icon_, FONT_ICON, LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_back_icon_, icon_clr, LV_PART_MAIN);
+        lv_obj_center(top_back_icon_);
         lv_obj_add_event_cb(back_btn, OnBackClicked, LV_EVENT_CLICKED, this);
 
-        // Screen Rotation Button on subpages too
+        // Screen Rotation Button on subpages too (pos x = 6 + 24 + 5 = 35)
         lv_obj_t* rot_btn = lv_btn_create(bar);
-        lv_obj_set_pos(rot_btn, 34, 4);
-        lv_obj_set_size(rot_btn, 24, 26);
+        lv_obj_set_pos(rot_btn, 35, 6);
+        lv_obj_set_size(rot_btn, 24, 24);
         StyleButton(rot_btn, C_BG, C_BG, 6);
         lv_obj_set_style_border_width(rot_btn, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(rot_btn, 0, LV_PART_MAIN);
-        lv_obj_t* rot_icon = lv_label_create(rot_btn);
-        lv_label_set_text(rot_icon, MATERIAL_SYMBOLS_REFRESH);
-        lv_obj_set_style_text_font(rot_icon, FONT_ICON, LV_PART_MAIN);
-        lv_obj_set_style_text_color(rot_icon, C_CYAN, LV_PART_MAIN);
-        lv_obj_center(rot_icon);
+        top_rot_icon_ = lv_label_create(rot_btn);
+        lv_label_set_text(top_rot_icon_, MATERIAL_SYMBOLS_REFRESH);
+        lv_obj_set_style_text_font(top_rot_icon_, FONT_ICON, LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_rot_icon_, icon_clr, LV_PART_MAIN);
+        lv_obj_center(top_rot_icon_);
         lv_obj_add_event_cb(rot_btn, [](lv_event_t* e) {
             (void)e;
             Board::GetInstance().RotateDisplay();
         }, LV_EVENT_CLICKED, nullptr);
 
-        title_x = 62;
+        title_x = 65;
         title_w = 70;
     } else {
         // Screen Rotation Button (Rotates display by 90 degrees)
         lv_obj_t* rot_btn = lv_btn_create(bar);
-        lv_obj_set_pos(rot_btn, 6, 4);
-        lv_obj_set_size(rot_btn, 24, 26);
+        lv_obj_set_pos(rot_btn, 6, 6);
+        lv_obj_set_size(rot_btn, 24, 24);
         StyleButton(rot_btn, C_BG, C_BG, 6);
         lv_obj_set_style_border_width(rot_btn, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(rot_btn, 0, LV_PART_MAIN);
-        lv_obj_t* rot_icon = lv_label_create(rot_btn);
-        lv_label_set_text(rot_icon, MATERIAL_SYMBOLS_REFRESH);
-        lv_obj_set_style_text_font(rot_icon, FONT_ICON, LV_PART_MAIN);
-        lv_obj_set_style_text_color(rot_icon, C_CYAN, LV_PART_MAIN);
-        lv_obj_center(rot_icon);
+        top_rot_icon_ = lv_label_create(rot_btn);
+        lv_label_set_text(top_rot_icon_, MATERIAL_SYMBOLS_REFRESH);
+        lv_obj_set_style_text_font(top_rot_icon_, FONT_ICON, LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_rot_icon_, icon_clr, LV_PART_MAIN);
+        lv_obj_center(top_rot_icon_);
         lv_obj_add_event_cb(rot_btn, [](lv_event_t* e) {
             (void)e;
             Board::GetInstance().RotateDisplay();
         }, LV_EVENT_CLICKED, nullptr);
 
-        // XiaoZhi Quick Brightness Button
+        // XiaoZhi Quick Brightness Button (pos x = 6 + 24 + 5 = 35)
         lv_obj_t* br_btn = lv_btn_create(bar);
-        lv_obj_set_pos(br_btn, 32, 4);
-        lv_obj_set_size(br_btn, 24, 26);
+        lv_obj_set_pos(br_btn, 35, 6);
+        lv_obj_set_size(br_btn, 24, 24);
         StyleButton(br_btn, C_BG, C_BG, 6);
         lv_obj_set_style_border_width(br_btn, 0, LV_PART_MAIN);
-        lv_obj_t* br_icon = lv_label_create(br_btn);
-        lv_label_set_text(br_icon, MATERIAL_SYMBOLS_BRIGHTNESS_6);
-        lv_obj_set_style_text_font(br_icon, FONT_ICON, LV_PART_MAIN);
-        lv_obj_set_style_text_color(br_icon, lv_color_hex(0xF59E0B), LV_PART_MAIN);
-        lv_obj_center(br_icon);
+        lv_obj_set_style_pad_all(br_btn, 0, LV_PART_MAIN);
+        top_br_icon_ = lv_label_create(br_btn);
+        lv_label_set_text(top_br_icon_, MATERIAL_SYMBOLS_BRIGHTNESS_6);
+        lv_obj_set_style_text_font(top_br_icon_, FONT_ICON, LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_br_icon_, icon_clr, LV_PART_MAIN);
+        lv_obj_center(top_br_icon_);
         lv_obj_set_user_data(br_btn, (void*)(intptr_t)PAGE_DISPLAY);
         lv_obj_add_event_cb(br_btn, OnNavClicked, LV_EVENT_CLICKED, this);
 
-        title_x = 58;
+        title_x = 65;
         title_w = 52;
     }
 
     // Dynamic right status bar layout based on bat_style_
     int bat_w = 52;
     if (bat_style_ == BAT_STYLE_ICON_ONLY) {
-        bat_w = 28;
+        bat_w = 24;
     } else if (bat_style_ == BAT_STYLE_PERCENT_ONLY) {
-        bat_w = 42;
+        bat_w = 38;
     }
-    int bat_x = width_ - 4 - bat_w;
+    const int gap = 5;
+    int bat_x = width_ - 6 - bat_w;
     int wifi_w = 24;
-    int wifi_x = bat_x - wifi_w - 4;
+    int wifi_x = bat_x - gap - wifi_w;
     int vol_w = 24;
-    int vol_x = wifi_x - vol_w - 4;
-    int bt_w = 22;
-    int bt_x = vol_x - bt_w - 4;
+    int vol_x = wifi_x - gap - vol_w;
+    int bt_w = 24;
+    int bt_x = vol_x - gap - bt_w;
 
     if (current_page_ == PAGE_HOME) {
         // Homescreen: omits title text so status bar icons have clean, luxurious spacing without overlap
-        int notif_w = 32;
-        int notif_x = bt_x - notif_w - 4;
+        int notif_w = 24;
+        int notif_x = bt_x - gap - notif_w;
 
         int notif_cnt = callbacks_.get_ble_notif_count ? callbacks_.get_ble_notif_count() : 0;
         top_notif_btn_ = lv_btn_create(bar);
-        lv_obj_set_pos(top_notif_btn_, notif_x, 4);
-        lv_obj_set_size(top_notif_btn_, notif_w, 26);
+        lv_obj_set_pos(top_notif_btn_, notif_x, 6);
+        lv_obj_set_size(top_notif_btn_, notif_w, 24);
         StyleButton(top_notif_btn_, C_BG, C_BG, 6);
         lv_obj_set_style_border_width(top_notif_btn_, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(top_notif_btn_, 0, LV_PART_MAIN);
@@ -681,24 +706,22 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
         lv_obj_clear_flag(top_notif_icon_, LV_OBJ_FLAG_CLICKABLE);
         lv_label_set_text(top_notif_icon_, MATERIAL_SYMBOLS_MAIL);
         lv_obj_set_style_text_font(top_notif_icon_, FONT_ICON, LV_PART_MAIN);
-        lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
-        lv_obj_set_pos(top_notif_icon_, 1, 3);
+        lv_obj_set_style_text_color(top_notif_icon_, icon_clr, LV_PART_MAIN);
+        lv_obj_center(top_notif_icon_);
 
         top_notif_label_ = lv_label_create(top_notif_btn_);
         lv_obj_clear_flag(top_notif_label_, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_text_font(top_notif_label_, FONT_10, LV_PART_MAIN);
-        lv_obj_set_style_text_color(top_notif_label_, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-        lv_obj_set_pos(top_notif_label_, 18, 5);
+        lv_obj_set_style_text_color(top_notif_label_, icon_clr, LV_PART_MAIN);
+        lv_obj_set_pos(top_notif_label_, 14, 2);
 
         if (notif_cnt > 0) {
             char n_txt[16];
             snprintf(n_txt, sizeof(n_txt), "%d", notif_cnt);
             lv_label_set_text(top_notif_label_, n_txt);
-            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
             lv_obj_clear_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_label_set_text(top_notif_label_, "");
-            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0x64748B), LV_PART_MAIN);
             lv_obj_add_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
         }
 
@@ -711,7 +734,7 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
         // Subpages: Show page title with ample room
         title_w = bt_x - title_x - 2;
         if (title_w < 30) title_w = 30;
-        lv_obj_t* title_lbl = MakeLabel(bar, title, title_x, 7, title_w, 20, FONT_14, C_TEXT, LV_TEXT_ALIGN_LEFT);
+        lv_obj_t* title_lbl = MakeLabel(bar, title, title_x, 8, title_w, 20, FONT_14, C_TEXT, LV_TEXT_ALIGN_LEFT);
         lv_label_set_long_mode(title_lbl, LV_LABEL_LONG_DOT);
     }
 
@@ -723,15 +746,16 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
         callbacks_.get_ble_status(ble_connected, ble_name, ble_mac);
     }
     lv_obj_t* bt_btn = lv_btn_create(bar);
-    lv_obj_set_pos(bt_btn, bt_x, 4);
-    lv_obj_set_size(bt_btn, bt_w, 26);
+    lv_obj_set_pos(bt_btn, bt_x, 6);
+    lv_obj_set_size(bt_btn, bt_w, 24);
     StyleButton(bt_btn, C_BG, C_BG, 6);
     lv_obj_set_style_border_width(bt_btn, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(bt_btn, 0, LV_PART_MAIN);
     top_bluetooth_icon_ = lv_label_create(bt_btn);
     lv_obj_clear_flag(top_bluetooth_icon_, LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text(top_bluetooth_icon_, MATERIAL_SYMBOLS_BLUETOOTH);
     lv_obj_set_style_text_font(top_bluetooth_icon_, FONT_ICON, LV_PART_MAIN);
-    lv_obj_set_style_text_color(top_bluetooth_icon_, ble_connected ? lv_color_hex(0x38BDF8) : lv_color_hex(0x64748B), LV_PART_MAIN);
+    lv_obj_set_style_text_color(top_bluetooth_icon_, icon_clr, LV_PART_MAIN);
     lv_obj_center(top_bluetooth_icon_);
     lv_obj_add_event_cb(bt_btn, [](lv_event_t* e) {
         if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -741,15 +765,16 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
 
     // 2. Volume / Speaker (Tap -> PAGE_AUDIO)
     lv_obj_t* vol_btn = lv_btn_create(bar);
-    lv_obj_set_pos(vol_btn, vol_x, 4);
-    lv_obj_set_size(vol_btn, vol_w, 26);
+    lv_obj_set_pos(vol_btn, vol_x, 6);
+    lv_obj_set_size(vol_btn, vol_w, 24);
     StyleButton(vol_btn, C_BG, C_BG, 6);
     lv_obj_set_style_border_width(vol_btn, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(vol_btn, 0, LV_PART_MAIN);
     top_mute_icon_ = lv_label_create(vol_btn);
     lv_obj_clear_flag(top_mute_icon_, LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text(top_mute_icon_, muted_ ? MATERIAL_SYMBOLS_VOLUME_OFF : MATERIAL_SYMBOLS_VOLUME_UP);
     lv_obj_set_style_text_font(top_mute_icon_, FONT_ICON, LV_PART_MAIN);
-    lv_obj_set_style_text_color(top_mute_icon_, muted_ ? C_MUTED : lv_color_hex(0x06B6D4), LV_PART_MAIN);
+    lv_obj_set_style_text_color(top_mute_icon_, icon_clr, LV_PART_MAIN);
     lv_obj_center(top_mute_icon_);
     lv_obj_set_user_data(vol_btn, (void*)(intptr_t)PAGE_AUDIO);
     lv_obj_add_event_cb(vol_btn, OnNavClicked, LV_EVENT_CLICKED, this);
@@ -760,15 +785,16 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
     bool wifi_connected = (sta_netif && esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0);
 
     lv_obj_t* wifi_btn = lv_btn_create(bar);
-    lv_obj_set_pos(wifi_btn, wifi_x, 4);
-    lv_obj_set_size(wifi_btn, wifi_w, 26);
+    lv_obj_set_pos(wifi_btn, wifi_x, 6);
+    lv_obj_set_size(wifi_btn, wifi_w, 24);
     StyleButton(wifi_btn, C_BG, C_BG, 6);
     lv_obj_set_style_border_width(wifi_btn, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(wifi_btn, 0, LV_PART_MAIN);
     top_wifi_icon_ = lv_label_create(wifi_btn);
     lv_obj_clear_flag(top_wifi_icon_, LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text(top_wifi_icon_, wifi_connected ? MATERIAL_SYMBOLS_WIFI : MATERIAL_SYMBOLS_REFRESH);
     lv_obj_set_style_text_font(top_wifi_icon_, FONT_ICON, LV_PART_MAIN);
-    lv_obj_set_style_text_color(top_wifi_icon_, wifi_connected ? lv_color_hex(0x22C55E) : lv_color_hex(0xF59E0B), LV_PART_MAIN);
+    lv_obj_set_style_text_color(top_wifi_icon_, icon_clr, LV_PART_MAIN);
     lv_obj_center(top_wifi_icon_);
     lv_obj_set_user_data(wifi_btn, (void*)(intptr_t)PAGE_WIFI);
     lv_obj_add_event_cb(wifi_btn, OnNavClicked, LV_EVENT_CLICKED, this);
@@ -779,16 +805,17 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
     if (callbacks_.get_battery) callbacks_.get_battery(bat_lvl, bat_chg, bat_mv, bat_raw);
 
     lv_obj_t* bat_btn = lv_btn_create(bar);
-    lv_obj_set_pos(bat_btn, bat_x, 4);
-    lv_obj_set_size(bat_btn, bat_w, 26);
+    lv_obj_set_pos(bat_btn, bat_x, 6);
+    lv_obj_set_size(bat_btn, bat_w, 24);
     StyleButton(bat_btn, C_BG, C_BG, 6);
     lv_obj_set_style_border_width(bat_btn, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(bat_btn, 0, LV_PART_MAIN);
 
     top_battery_icon_ = lv_label_create(bat_btn);
     lv_obj_clear_flag(top_battery_icon_, LV_OBJ_FLAG_CLICKABLE);
     lv_label_set_text(top_battery_icon_, bat_chg ? MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_BOLT : MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL);
     lv_obj_set_style_text_font(top_battery_icon_, FONT_ICON, LV_PART_MAIN);
-    lv_obj_set_style_text_color(top_battery_icon_, bat_chg ? lv_color_hex(0xF59E0B) : (bat_lvl < 20 ? lv_color_hex(0xFF8195) : lv_color_hex(0x7DE0B5)), LV_PART_MAIN);
+    lv_obj_set_style_text_color(top_battery_icon_, icon_clr, LV_PART_MAIN);
 
     top_battery_label_ = lv_label_create(bat_btn);
     lv_obj_clear_flag(top_battery_label_, LV_OBJ_FLAG_CLICKABLE);
@@ -796,7 +823,7 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
     snprintf(b_txt, sizeof(b_txt), "%d%%", bat_lvl);
     lv_label_set_text(top_battery_label_, b_txt);
     lv_obj_set_style_text_font(top_battery_label_, FONT_12, LV_PART_MAIN);
-    lv_obj_set_style_text_color(top_battery_label_, C_TEXT, LV_PART_MAIN);
+    lv_obj_set_style_text_color(top_battery_label_, icon_clr, LV_PART_MAIN);
 
     if (bat_style_ == BAT_STYLE_ICON_ONLY) {
         lv_obj_center(top_battery_icon_);
@@ -805,8 +832,8 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
         lv_obj_add_flag(top_battery_icon_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_center(top_battery_label_);
     } else { // BAT_STYLE_ICON_PERCENT
-        lv_obj_set_pos(top_battery_icon_, 2, 3);
-        lv_obj_set_pos(top_battery_label_, 22, 4);
+        lv_obj_set_pos(top_battery_icon_, 2, 2);
+        lv_obj_set_pos(top_battery_label_, 22, 3);
     }
 
     lv_obj_set_user_data(bat_btn, (void*)(intptr_t)PAGE_BATTERY);
@@ -1096,6 +1123,9 @@ lv_obj_t* NovaDisplay::NewRoot() {
     }
     CloseAllModals();
 
+    top_back_icon_ = nullptr;
+    top_rot_icon_ = nullptr;
+    top_br_icon_ = nullptr;
     top_wifi_icon_ = nullptr;
     top_bluetooth_icon_ = nullptr;
     top_notif_btn_ = nullptr;
@@ -3715,6 +3745,50 @@ void NovaDisplay::BuildDisplay() {
         make_level_button(right_list, "ACAK", 51, 326, 46, 22, icon_color_mode_ == ICON_COLOR_RANDOM, on_icon_mode_click, ICON_COLOR_RANDOM);
         make_level_button(right_list, "TEMA", 100, 326, 46, 22, icon_color_mode_ == ICON_COLOR_THEME, on_icon_mode_click, ICON_COLOR_THEME);
 
+        // 8. Header Icon Color (Warna Ikon Header Status Bar)
+        MakeLabel(right_list, "WARNA IKON HEADER", 2, 352, 148, 14, FONT_10, C_MUTED);
+        lv_obj_t* hdr_box = lv_obj_create(right_list);
+        lv_obj_set_pos(hdr_box, 2, 366);
+        lv_obj_set_size(hdr_box, 148, 30);
+        lv_obj_set_flex_flow(hdr_box, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(hdr_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_bg_color(hdr_box, C_PANEL, 0);
+        lv_obj_set_style_border_color(hdr_box, C_BORDER, 0);
+        lv_obj_set_style_border_width(hdr_box, 1, 0);
+        lv_obj_set_style_radius(hdr_box, 6, 0);
+        lv_obj_set_style_pad_all(hdr_box, 2, 0);
+        lv_obj_set_style_pad_column(hdr_box, 4, 0);
+        lv_obj_set_scroll_dir(hdr_box, LV_DIR_HOR);
+        lv_obj_set_scrollbar_mode(hdr_box, LV_SCROLLBAR_MODE_OFF);
+
+        static const uint32_t kHdrColors[] = {
+            0xFFFFFF, 0x38BDF8, 0x22C55E, 0x06B6D4, 0xFFE600,
+            0xF97316, 0xEF4444, 0xA855F7, 0xEC4899, 0x94A3B8
+        };
+        for (size_t i = 0; i < sizeof(kHdrColors)/sizeof(kHdrColors[0]); ++i) {
+            lv_obj_t* dot = lv_btn_create(hdr_box);
+            lv_obj_set_size(dot, 20, 20);
+            lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_color(dot, lv_color_hex(kHdrColors[i]), 0);
+            lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+            lv_obj_set_style_shadow_width(dot, 0, 0);
+            bool is_active = (header_icon_color_ == kHdrColors[i]);
+            lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
+            lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
+            lv_obj_set_style_pad_all(dot, 0, 0);
+
+            lv_obj_set_user_data(dot, (void*)(uintptr_t)kHdrColors[i]);
+            lv_obj_add_event_cb(dot, [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (!self) return;
+                uint32_t clr = (uint32_t)(uintptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+                self->ApplyHeaderIconColor(clr, true);
+                if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                self->BuildDisplay();
+            }, LV_EVENT_CLICKED, this);
+        }
+
     } else {
         // === PORTRAIT LAYOUT (240x320) WITH SMOOTH SCROLLING ===
         lv_obj_t* list = lv_obj_create(root);
@@ -3723,7 +3797,7 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_bottom(list, 180, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 260, LV_PART_MAIN);
         lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
@@ -3981,8 +4055,53 @@ void NovaDisplay::BuildDisplay() {
         make_level_button(list, "ACAK",     84, 612, 68, 28, icon_color_mode_ == ICON_COLOR_RANDOM, on_icon_mode_click, ICON_COLOR_RANDOM);
         make_level_button(list, "TEMA",     156, 612, 68, 28, icon_color_mode_ == ICON_COLOR_THEME, on_icon_mode_click, ICON_COLOR_THEME);
 
-        // Section 8: Screen Rotation Button
-        MakeButton(list, "ROTASI LAYAR 90°", 12, 652, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        // Section 8: Header Icon Color (Warna Ikon Header Status Bar)
+        MakeLabel(list, "WARNA IKON HEADER (STATUS BAR)", 14, 652, 212, 14, FONT_10, C_MUTED);
+
+        lv_obj_t* hdr_box = lv_obj_create(list);
+        lv_obj_set_pos(hdr_box, 12, 668);
+        lv_obj_set_size(hdr_box, 216, 34);
+        lv_obj_set_flex_flow(hdr_box, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(hdr_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_bg_color(hdr_box, C_PANEL, 0);
+        lv_obj_set_style_border_color(hdr_box, C_BORDER, 0);
+        lv_obj_set_style_border_width(hdr_box, 1, 0);
+        lv_obj_set_style_radius(hdr_box, 8, 0);
+        lv_obj_set_style_pad_all(hdr_box, 3, 0);
+        lv_obj_set_style_pad_column(hdr_box, 6, 0);
+        lv_obj_set_scroll_dir(hdr_box, LV_DIR_HOR);
+        lv_obj_set_scrollbar_mode(hdr_box, LV_SCROLLBAR_MODE_OFF);
+
+        static const uint32_t kHdrColorsPort[] = {
+            0xFFFFFF, 0x38BDF8, 0x22C55E, 0x06B6D4, 0xFFE600,
+            0xF97316, 0xEF4444, 0xA855F7, 0xEC4899, 0x94A3B8
+        };
+        for (size_t i = 0; i < sizeof(kHdrColorsPort)/sizeof(kHdrColorsPort[0]); ++i) {
+            lv_obj_t* dot = lv_btn_create(hdr_box);
+            lv_obj_set_size(dot, 24, 24);
+            lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_color(dot, lv_color_hex(kHdrColorsPort[i]), 0);
+            lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+            lv_obj_set_style_shadow_width(dot, 0, 0);
+            bool is_active = (header_icon_color_ == kHdrColorsPort[i]);
+            lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
+            lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
+            lv_obj_set_style_pad_all(dot, 0, 0);
+
+            lv_obj_set_user_data(dot, (void*)(uintptr_t)kHdrColorsPort[i]);
+            lv_obj_add_event_cb(dot, [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (!self) return;
+                uint32_t clr = (uint32_t)(uintptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+                self->ApplyHeaderIconColor(clr, true);
+                if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+                self->BuildDisplay();
+            }, LV_EVENT_CLICKED, this);
+        }
+
+        // Section 9: Screen Rotation Button
+        MakeButton(list, "ROTASI LAYAR 90°", 12, 712, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
             [](lv_event_t* e) {
                 (void)e;
                 Board::GetInstance().RotateDisplay();
@@ -5860,6 +5979,8 @@ void NovaDisplay::UpdateLiveLabels() {
     esp_netif_t* sta_netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     bool wifi_connected = (sta_netif && esp_netif_get_ip_info(sta_netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0);
 
+    lv_color_t icon_clr = lv_color_hex(header_icon_color_);
+
     if (top_bluetooth_icon_) {
         bool ble_conn = false;
         std::string bname, bmac;
@@ -5867,7 +5988,7 @@ void NovaDisplay::UpdateLiveLabels() {
             callbacks_.get_ble_status(ble_conn, bname, bmac);
         }
         lv_label_set_text(top_bluetooth_icon_, MATERIAL_SYMBOLS_BLUETOOTH);
-        lv_obj_set_style_text_color(top_bluetooth_icon_, ble_conn ? lv_color_hex(0x38BDF8) : lv_color_hex(0x64748B), LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_bluetooth_icon_, icon_clr, LV_PART_MAIN);
     }
 
     if (top_notif_btn_ && top_notif_icon_ && top_notif_label_) {
@@ -5876,11 +5997,11 @@ void NovaDisplay::UpdateLiveLabels() {
             char n_buf[16];
             snprintf(n_buf, sizeof(n_buf), "%d", n_cnt);
             lv_label_set_text(top_notif_label_, n_buf);
-            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
+            lv_obj_set_style_text_color(top_notif_icon_, icon_clr, LV_PART_MAIN);
+            lv_obj_set_style_text_color(top_notif_label_, icon_clr, LV_PART_MAIN);
             lv_obj_clear_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_label_set_text(top_notif_label_, "");
-            lv_obj_set_style_text_color(top_notif_icon_, lv_color_hex(0x64748B), LV_PART_MAIN);
             lv_obj_add_flag(top_notif_label_, LV_OBJ_FLAG_HIDDEN);
         }
         lv_obj_clear_flag(top_notif_btn_, LV_OBJ_FLAG_HIDDEN);
@@ -5888,7 +6009,7 @@ void NovaDisplay::UpdateLiveLabels() {
 
     if (top_mute_icon_) {
         lv_label_set_text(top_mute_icon_, muted_ ? MATERIAL_SYMBOLS_VOLUME_OFF : MATERIAL_SYMBOLS_VOLUME_UP);
-        lv_obj_set_style_text_color(top_mute_icon_, muted_ ? C_MUTED : lv_color_hex(0x06B6D4), LV_PART_MAIN);
+        lv_obj_set_style_text_color(top_mute_icon_, icon_clr, LV_PART_MAIN);
     }
 
     static uint32_t wifi_tick = 0;
@@ -5900,27 +6021,19 @@ void NovaDisplay::UpdateLiveLabels() {
             if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
                 int8_t rssi = ap_info.rssi;
                 if (rssi >= -65) {
-                    // Strong signal (3 bars): Green
                     lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI);
-                    lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0x22C55E), LV_PART_MAIN);
                 } else if (rssi >= -78) {
-                    // Medium signal (2 bars): Amber/Yellow
                     lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI_2_BAR);
-                    lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0xEAB308), LV_PART_MAIN);
                 } else {
-                    // Weak signal (1 bar): Red/Coral
                     lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI_1_BAR);
-                    lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0xEF4444), LV_PART_MAIN);
                 }
             } else {
                 lv_label_set_text(top_wifi_icon_, MATERIAL_SYMBOLS_WIFI);
-                lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0x22C55E), LV_PART_MAIN);
             }
         } else {
-            // Reconnecting indicator: alternating icon and amber color
             lv_label_set_text(top_wifi_icon_, (wifi_tick % 2 == 0) ? MATERIAL_SYMBOLS_REFRESH : MATERIAL_SYMBOLS_WIFI_OFF);
-            lv_obj_set_style_text_color(top_wifi_icon_, lv_color_hex(0xF59E0B), LV_PART_MAIN);
         }
+        lv_obj_set_style_text_color(top_wifi_icon_, icon_clr, LV_PART_MAIN);
     }
 
     if (battery_percent_label_ || battery_volt_label_ || top_battery_icon_ || top_battery_label_) {
@@ -5930,7 +6043,7 @@ void NovaDisplay::UpdateLiveLabels() {
 
         if (top_battery_icon_) {
             lv_label_set_text(top_battery_icon_, chg ? MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_BOLT : MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL);
-            lv_obj_set_style_text_color(top_battery_icon_, chg ? lv_color_hex(0xF59E0B) : (level < 20 ? lv_color_hex(0xFF8195) : lv_color_hex(0x7DE0B5)), LV_PART_MAIN);
+            lv_obj_set_style_text_color(top_battery_icon_, icon_clr, LV_PART_MAIN);
             if (bat_style_ == BAT_STYLE_PERCENT_ONLY) {
                 lv_obj_add_flag(top_battery_icon_, LV_OBJ_FLAG_HIDDEN);
             } else {
@@ -5940,6 +6053,7 @@ void NovaDisplay::UpdateLiveLabels() {
         if (top_battery_label_) {
             char pct[16]; snprintf(pct, sizeof(pct), "%d%%", level);
             lv_label_set_text(top_battery_label_, pct);
+            lv_obj_set_style_text_color(top_battery_label_, icon_clr, LV_PART_MAIN);
             if (bat_style_ == BAT_STYLE_ICON_ONLY) {
                 lv_obj_add_flag(top_battery_label_, LV_OBJ_FLAG_HIDDEN);
             } else {

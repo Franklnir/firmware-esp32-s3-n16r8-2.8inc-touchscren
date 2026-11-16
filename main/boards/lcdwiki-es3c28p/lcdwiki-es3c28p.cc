@@ -1968,6 +1968,13 @@ private:
         int cur_w = (rotation_ == 90 || rotation_ == 270) ? DISPLAY_HEIGHT : DISPLAY_WIDTH;
         int cur_h = (rotation_ == 90 || rotation_ == 270) ? DISPLAY_WIDTH : DISPLAY_HEIGHT;
         nova_display_->Init(cur_w, cur_h);
+        if (display_) {
+            display_->SetOnHeaderIconColorChanged([this](uint32_t clr) {
+                if (nova_display_) {
+                    nova_display_->ApplyHeaderIconColor(clr, false);
+                }
+            });
+        }
         lvgl_port_unlock();
 
         InitializeButtons();

@@ -155,6 +155,7 @@ protected:
     bool wifi_pwd_visible_ = true;
     std::atomic<bool> wifi_scanning_{false};
     std::string wifi_selected_ssid_;
+    std::function<void(uint32_t)> on_header_icon_color_changed_;
 
     // Recent Apps Modal (Smartphone Task Switcher in XiaoZhi)
     lv_obj_t* recent_apps_modal_ = nullptr;
@@ -228,6 +229,9 @@ public:
     void ShowTextSizeOverlay();
     void ShowHeaderColorOverlay();
     virtual void SetHeaderIconColor(uint32_t color_hex) override;
+    void SetOnHeaderIconColorChanged(std::function<void(uint32_t)> cb) {
+        on_header_icon_color_changed_ = std::move(cb);
+    }
     void HideOverlays();
     bool IsOverlayVisible() const { return overlay_visible_; }
 

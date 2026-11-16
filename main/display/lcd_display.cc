@@ -1904,11 +1904,14 @@ void LcdDisplay::CreateControlCenter() {
     lv_obj_set_style_text_color(color_lbl, lv_color_hex(header_icon_color_), 0);
     lv_obj_center(color_lbl);
 
-    lv_obj_add_event_cb(color_btn, [](lv_event_t* e) {
-        auto display = static_cast<LcdDisplay*>(lv_event_get_user_data(e));
-        display->HideControlCenter();
-        display->ShowHeaderColorOverlay();
-    }, LV_EVENT_CLICKED, this);
+    lv_obj_add_event_cb(
+        color_btn,
+        [](lv_event_t* e) {
+            auto display = static_cast<LcdDisplay*>(lv_event_get_user_data(e));
+            display->HideControlCenter();
+            display->ShowHeaderColorOverlay();
+        },
+        LV_EVENT_CLICKED, this);
 
     // Bottom Color Palette Row (Real-time color choices)
     cp_color_box_ = lv_obj_create(cp_drawer_);
@@ -1930,17 +1933,9 @@ void LcdDisplay::CreateControlCenter() {
         uint32_t color_hex;
     };
     static const ColorItem color_items[] = {
-        {"putih", 0xFFFFFF},
-        {"biru",  0x38BDF8},
-        {"hijau", 0x22C55E},
-        {"cyan",  0x06B6D4},
-        {"kuning",0xFFE600},
-        {"oranye",0xF97316},
-        {"merah", 0xEF4444},
-        {"ungu",  0xA855F7},
-        {"pink",  0xEC4899},
-        {"silver",0x94A3B8}
-    };
+        {"putih", 0xFFFFFF},  {"biru", 0x38BDF8},   {"hijau", 0x22C55E}, {"cyan", 0x06B6D4},
+        {"kuning", 0xFFE600}, {"oranye", 0xF97316}, {"merah", 0xEF4444}, {"ungu", 0xA855F7},
+        {"pink", 0xEC4899},   {"silver", 0x94A3B8}};
 
     for (const auto& item : color_items) {
         lv_obj_t* p = lv_button_create(cp_color_box_);
@@ -1957,17 +1952,20 @@ void LcdDisplay::CreateControlCenter() {
             uint32_t color_hex;
         };
         auto* ed = new EventData{this, item.theme_name, item.color_hex};
-        lv_obj_add_event_cb(p, [](lv_event_t* e) {
-            auto* d = static_cast<EventData*>(lv_event_get_user_data(e));
-            d->display->SetHeaderIconColor(d->color_hex);
-            auto th = LvglThemeManager::GetInstance().GetTheme(d->name);
-            if (th) {
-                SyncThemeGlobal(d->name);
-                d->display->SetTheme(th);
-            }
-            Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP);
-            d->display->ShowNotification(std::string("Warna Icon: ") + d->name);
-        }, LV_EVENT_CLICKED, ed);
+        lv_obj_add_event_cb(
+            p,
+            [](lv_event_t* e) {
+                auto* d = static_cast<EventData*>(lv_event_get_user_data(e));
+                d->display->SetHeaderIconColor(d->color_hex);
+                auto th = LvglThemeManager::GetInstance().GetTheme(d->name);
+                if (th) {
+                    SyncThemeGlobal(d->name);
+                    d->display->SetTheme(th);
+                }
+                Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP);
+                d->display->ShowNotification(std::string("Warna Icon: ") + d->name);
+            },
+            LV_EVENT_CLICKED, ed);
     }
 }
 
@@ -2332,7 +2330,8 @@ void LcdDisplay::CreateDirectOverlays() {
     lv_obj_set_style_border_color(header_color_overlay_card_, lv_color_hex(border_hex), 0);
     lv_obj_set_style_pad_all(header_color_overlay_card_, 8, 0);
     lv_obj_set_flex_flow(header_color_overlay_card_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(header_color_overlay_card_, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(header_color_overlay_card_, LV_FLEX_ALIGN_SPACE_BETWEEN,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_scrollbar_mode(header_color_overlay_card_, LV_SCROLLBAR_MODE_OFF);
     lv_obj_add_flag(header_color_overlay_card_, LV_OBJ_FLAG_HIDDEN);
 
@@ -2353,28 +2352,33 @@ void LcdDisplay::CreateDirectOverlays() {
     lv_obj_set_style_pad_left(hc_prev, 8, 0);
     lv_obj_set_style_pad_right(hc_prev, 8, 0);
     lv_obj_set_flex_flow(hc_prev, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(hc_prev, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(hc_prev, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
 
     lv_color_t curr_icon_clr = lv_color_hex(header_icon_color_);
 
     preview_rot_label_ = lv_label_create(hc_prev);
     lv_label_set_text(preview_rot_label_, MATERIAL_SYMBOLS_REFRESH);
-    if (icon_font) lv_obj_set_style_text_font(preview_rot_label_, icon_font, 0);
+    if (icon_font)
+        lv_obj_set_style_text_font(preview_rot_label_, icon_font, 0);
     lv_obj_set_style_text_color(preview_rot_label_, curr_icon_clr, 0);
 
     preview_bright_label_ = lv_label_create(hc_prev);
     lv_label_set_text(preview_bright_label_, MATERIAL_SYMBOLS_BRIGHTNESS_6);
-    if (icon_font) lv_obj_set_style_text_font(preview_bright_label_, icon_font, 0);
+    if (icon_font)
+        lv_obj_set_style_text_font(preview_bright_label_, icon_font, 0);
     lv_obj_set_style_text_color(preview_bright_label_, curr_icon_clr, 0);
 
     preview_vol_label_ = lv_label_create(hc_prev);
     lv_label_set_text(preview_vol_label_, MATERIAL_SYMBOLS_VOLUME_UP);
-    if (icon_font) lv_obj_set_style_text_font(preview_vol_label_, icon_font, 0);
+    if (icon_font)
+        lv_obj_set_style_text_font(preview_vol_label_, icon_font, 0);
     lv_obj_set_style_text_color(preview_vol_label_, curr_icon_clr, 0);
 
     preview_wifi_label_ = lv_label_create(hc_prev);
     lv_label_set_text(preview_wifi_label_, MATERIAL_SYMBOLS_WIFI);
-    if (icon_font) lv_obj_set_style_text_font(preview_wifi_label_, icon_font, 0);
+    if (icon_font)
+        lv_obj_set_style_text_font(preview_wifi_label_, icon_font, 0);
     lv_obj_set_style_text_color(preview_wifi_label_, curr_icon_clr, 0);
 
     lv_obj_t* bat_box = lv_obj_create(hc_prev);
@@ -2383,12 +2387,14 @@ void LcdDisplay::CreateDirectOverlays() {
     lv_obj_set_style_border_width(bat_box, 0, 0);
     lv_obj_set_style_pad_all(bat_box, 0, 0);
     lv_obj_set_flex_flow(bat_box, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(bat_box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(bat_box, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(bat_box, 2, 0);
 
     preview_bat_label_ = lv_label_create(bat_box);
     lv_label_set_text(preview_bat_label_, MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL);
-    if (icon_font) lv_obj_set_style_text_font(preview_bat_label_, icon_font, 0);
+    if (icon_font)
+        lv_obj_set_style_text_font(preview_bat_label_, icon_font, 0);
     lv_obj_set_style_text_color(preview_bat_label_, curr_icon_clr, 0);
 
     preview_bat_pct_label_ = lv_label_create(bat_box);
@@ -2402,7 +2408,8 @@ void LcdDisplay::CreateDirectOverlays() {
     lv_obj_set_style_border_width(hc_palette, 0, 0);
     lv_obj_set_style_pad_all(hc_palette, 2, 0);
     lv_obj_set_flex_flow(hc_palette, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(hc_palette, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(hc_palette, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_row(hc_palette, 6, 0);
     lv_obj_set_style_pad_column(hc_palette, 6, 0);
     lv_obj_set_scrollbar_mode(hc_palette, LV_SCROLLBAR_MODE_OFF);
@@ -2412,17 +2419,10 @@ void LcdDisplay::CreateDirectOverlays() {
         uint32_t hex;
     };
     static const HeaderColorDef kHeaderColors[] = {
-        {"Putih",       0xFFFFFF},
-        {"Biru Langit", 0x38BDF8},
-        {"Hijau Neon",  0x22C55E},
-        {"Cyan Modern", 0x06B6D4},
-        {"Kuning Emas", 0xFFE600},
-        {"Oranye",      0xF97316},
-        {"Merah",       0xEF4444},
-        {"Ungu",        0xA855F7},
-        {"Pink",        0xEC4899},
-        {"Silver",      0x94A3B8}
-    };
+        {"Putih", 0xFFFFFF},       {"Biru Langit", 0x38BDF8}, {"Hijau Neon", 0x22C55E},
+        {"Cyan Modern", 0x06B6D4}, {"Kuning Emas", 0xFFE600}, {"Oranye", 0xF97316},
+        {"Merah", 0xEF4444},       {"Ungu", 0xA855F7},        {"Pink", 0xEC4899},
+        {"Silver", 0x94A3B8}};
 
     for (const auto& c : kHeaderColors) {
         lv_obj_t* dot = lv_button_create(hc_palette);
@@ -2439,13 +2439,17 @@ void LcdDisplay::CreateDirectOverlays() {
             uint32_t hex;
         };
         auto* data = new DotCbData{this, c.name, c.hex};
-        lv_obj_add_event_cb(dot, [](lv_event_t* e) {
-            auto* d = static_cast<DotCbData*>(lv_event_get_user_data(e));
-            if (!d || !d->disp) return;
-            d->disp->SetHeaderIconColor(d->hex);
-            Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP);
-            d->disp->ShowNotification(std::string("Warna Icon: ") + d->name);
-        }, LV_EVENT_CLICKED, data);
+        lv_obj_add_event_cb(
+            dot,
+            [](lv_event_t* e) {
+                auto* d = static_cast<DotCbData*>(lv_event_get_user_data(e));
+                if (!d || !d->disp)
+                    return;
+                d->disp->SetHeaderIconColor(d->hex);
+                Application::GetInstance().PlaySound(Lang::Sounds::OGG_POPUP);
+                d->disp->ShowNotification(std::string("Warna Icon: ") + d->name);
+            },
+            LV_EVENT_CLICKED, data);
     }
 
     // Hint Label
@@ -2556,15 +2560,18 @@ void LcdDisplay::ShowTextSizeOverlay() {
 
 void LcdDisplay::ShowHeaderColorOverlay() {
     DisplayLockGuard lock(this);
-    if (!header_color_overlay_card_ || !overlay_backdrop_) return;
+    if (!header_color_overlay_card_ || !overlay_backdrop_)
+        return;
 
     HideOverlays();
-    if (cp_visible_) ToggleControlCenter();
+    if (cp_visible_)
+        ToggleControlCenter();
 
     const auto* synced = GetCurrentSyncedTheme();
     if (synced) {
         lv_obj_set_style_bg_color(header_color_overlay_card_, lv_color_hex(synced->panel_color), 0);
-        lv_obj_set_style_border_color(header_color_overlay_card_, lv_color_hex(synced->border_color), 0);
+        lv_obj_set_style_border_color(header_color_overlay_card_,
+                                      lv_color_hex(synced->border_color), 0);
     }
 
     UpdateHeaderColorOverlayUI();
@@ -2578,12 +2585,18 @@ void LcdDisplay::ShowHeaderColorOverlay() {
 
 void LcdDisplay::UpdateHeaderColorOverlayUI() {
     lv_color_t clr = lv_color_hex(header_icon_color_);
-    if (preview_rot_label_) lv_obj_set_style_text_color(preview_rot_label_, clr, 0);
-    if (preview_bright_label_) lv_obj_set_style_text_color(preview_bright_label_, clr, 0);
-    if (preview_vol_label_) lv_obj_set_style_text_color(preview_vol_label_, clr, 0);
-    if (preview_wifi_label_) lv_obj_set_style_text_color(preview_wifi_label_, clr, 0);
-    if (preview_bat_label_) lv_obj_set_style_text_color(preview_bat_label_, clr, 0);
-    if (preview_bat_pct_label_) lv_obj_set_style_text_color(preview_bat_pct_label_, clr, 0);
+    if (preview_rot_label_)
+        lv_obj_set_style_text_color(preview_rot_label_, clr, 0);
+    if (preview_bright_label_)
+        lv_obj_set_style_text_color(preview_bright_label_, clr, 0);
+    if (preview_vol_label_)
+        lv_obj_set_style_text_color(preview_vol_label_, clr, 0);
+    if (preview_wifi_label_)
+        lv_obj_set_style_text_color(preview_wifi_label_, clr, 0);
+    if (preview_bat_label_)
+        lv_obj_set_style_text_color(preview_bat_label_, clr, 0);
+    if (preview_bat_pct_label_)
+        lv_obj_set_style_text_color(preview_bat_pct_label_, clr, 0);
 }
 
 void LcdDisplay::SetHeaderIconColor(uint32_t color_hex) {
@@ -2592,14 +2605,23 @@ void LcdDisplay::SetHeaderIconColor(uint32_t color_hex) {
     Settings disp_set("display", true);
     disp_set.SetInt("hdr_icon_clr", (int)color_hex);
     lv_color_t clr = lv_color_hex(color_hex);
-    if (rot_icon_label_) lv_obj_set_style_text_color(rot_icon_label_, clr, 0);
-    if (br_icon_label_) lv_obj_set_style_text_color(br_icon_label_, clr, 0);
-    if (mute_label_) lv_obj_set_style_text_color(mute_label_, clr, 0);
-    if (network_label_) lv_obj_set_style_text_color(network_label_, clr, 0);
-    if (battery_label_) lv_obj_set_style_text_color(battery_label_, clr, 0);
-    if (battery_pct_label_) lv_obj_set_style_text_color(battery_pct_label_, clr, 0);
+    if (rot_icon_label_)
+        lv_obj_set_style_text_color(rot_icon_label_, clr, 0);
+    if (br_icon_label_)
+        lv_obj_set_style_text_color(br_icon_label_, clr, 0);
+    if (mute_label_)
+        lv_obj_set_style_text_color(mute_label_, clr, 0);
+    if (network_label_)
+        lv_obj_set_style_text_color(network_label_, clr, 0);
+    if (battery_label_)
+        lv_obj_set_style_text_color(battery_label_, clr, 0);
+    if (battery_pct_label_)
+        lv_obj_set_style_text_color(battery_pct_label_, clr, 0);
     UpdateHeaderColorOverlayUI();
     UpdateStatusBar(true);
+    if (on_header_icon_color_changed_) {
+        on_header_icon_color_changed_(color_hex);
+    }
 }
 
 void LcdDisplay::CloseRecentAppsModal() {
@@ -2620,7 +2642,8 @@ void LcdDisplay::ShowRecentAppsModal() {
         lv_obj_add_flag(bright_overlay_card_, LV_OBJ_FLAG_HIDDEN);
     if (text_size_overlay_card_)
         lv_obj_add_flag(text_size_overlay_card_, LV_OBJ_FLAG_HIDDEN);
-    if (header_color_overlay_card_) lv_obj_add_flag(header_color_overlay_card_, LV_OBJ_FLAG_HIDDEN);
+    if (header_color_overlay_card_)
+        lv_obj_add_flag(header_color_overlay_card_, LV_OBJ_FLAG_HIDDEN);
     overlay_visible_ = false;
     if (IsControlCenterVisible()) {
         ToggleControlCenter();
@@ -2810,7 +2833,8 @@ void LcdDisplay::HideOverlays() {
         lv_obj_add_flag(bright_overlay_card_, LV_OBJ_FLAG_HIDDEN);
     if (text_size_overlay_card_)
         lv_obj_add_flag(text_size_overlay_card_, LV_OBJ_FLAG_HIDDEN);
-    if (header_color_overlay_card_) lv_obj_add_flag(header_color_overlay_card_, LV_OBJ_FLAG_HIDDEN);
+    if (header_color_overlay_card_)
+        lv_obj_add_flag(header_color_overlay_card_, LV_OBJ_FLAG_HIDDEN);
     CloseRecentAppsModal();
     overlay_visible_ = false;
 }

@@ -185,6 +185,9 @@ public:
     int GetCurrentTextWeight() const;
     void ApplyTextWeightToObj(lv_obj_t* obj, lv_color_t color);
 
+    void ApplyHeaderIconColor(uint32_t color_hex, bool persist = true);
+    uint32_t GetHeaderIconColor() const { return header_icon_color_; }
+
     bool IsNotifSoundEnabled() const;
     void SetNotifSoundEnabled(bool en);
     int GetNotifSoundIndex() const;
@@ -375,6 +378,9 @@ private:
     lv_obj_t* region_ntp_status_ = nullptr;
 
     // Top status bar handles (identik XiaoZhi)
+    lv_obj_t* top_back_icon_ = nullptr;
+    lv_obj_t* top_rot_icon_ = nullptr;
+    lv_obj_t* top_br_icon_ = nullptr;
     lv_obj_t* top_bluetooth_icon_ = nullptr;
     lv_obj_t* top_notif_btn_ = nullptr;
     lv_obj_t* top_notif_icon_ = nullptr;
@@ -384,6 +390,7 @@ private:
     lv_obj_t* top_battery_icon_ = nullptr;
     lv_obj_t* top_battery_label_ = nullptr;
     lv_obj_t* bt_modal_ = nullptr;
+    uint32_t header_icon_color_ = 0xFFFFFF;
     uint8_t bat_style_ = BAT_STYLE_ICON_PERCENT;
     uint8_t icon_color_mode_ = ICON_COLOR_MIXED;
 
