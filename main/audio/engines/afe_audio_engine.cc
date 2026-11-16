@@ -31,6 +31,14 @@ AfeAudioEngine::~AfeAudioEngine() {
     if (afe_data_ != nullptr) {
         afe_iface_->destroy(afe_data_);
     }
+    if (processing_task_stack_ != nullptr) {
+        heap_caps_free(processing_task_stack_);
+        processing_task_stack_ = nullptr;
+    }
+    if (processing_task_buffer_ != nullptr) {
+        heap_caps_free(processing_task_buffer_);
+        processing_task_buffer_ = nullptr;
+    }
     if (wake_word_encode_task_stack_ != nullptr) {
         heap_caps_free(wake_word_encode_task_stack_);
     }
@@ -207,12 +215,43 @@ bool AfeAudioEngine::Initialize(AudioCodec* codec, int frame_duration_ms, srmode
     }
     afe_iface_->print_pipeline(afe_data_);
 
-    BaseType_t task_created = xTaskCreate([](void* arg) {
-        auto* engine = static_cast<AfeAudioEngine*>(arg);
-        engine->ProcessingTask();
-        vTaskDelete(nullptr);
-    }, "audio_afe", 4096, this, 3, &processing_task_);
-    if (task_created != pdPASS) {
+    const size_t processing_stack_size = 8192;
+    if (processing_task_stack_ == nullptr) {
+        // Allocate stack in PSRAM to save precious internal SRAM for WiFi, TLS, and audio DMA
+        processing_task_stack_ = static_cast<StackType_t*>(
+            heap_caps_malloc(processing_stack_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        if (processing_task_stack_ == nullptr) {
+            processing_task_stack_ = static_cast<StackType_t*>(
+                heap_caps_malloc(processing_stack_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        }
+    }
+    if (processing_task_buffer_ == nullptr) {
+        processing_task_buffer_ = static_cast<StaticTask_t*>(
+            heap_caps_malloc(sizeof(StaticTask_t), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+        if (processing_task_buffer_ == nullptr) {
+            processing_task_buffer_ = static_cast<StaticTask_t*>(
+                heap_caps_malloc(sizeof(StaticTask_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+        }
+    }
+
+    if (processing_task_stack_ != nullptr && processing_task_buffer_ != nullptr) {
+        processing_task_ = xTaskCreateStatic([](void* arg) {
+            auto* engine = static_cast<AfeAudioEngine*>(arg);
+            engine->ProcessingTask();
+            vTaskDelete(nullptr);
+        }, "audio_afe", processing_stack_size, this, 3, processing_task_stack_, processing_task_buffer_);
+    } else {
+        BaseType_t task_created = xTaskCreate([](void* arg) {
+            auto* engine = static_cast<AfeAudioEngine*>(arg);
+            engine->ProcessingTask();
+            vTaskDelete(nullptr);
+        }, "audio_afe", 4096, this, 3, &processing_task_);
+        if (task_created != pdPASS) {
+            processing_task_ = nullptr;
+        }
+    }
+
+    if (processing_task_ == nullptr) {
         ESP_LOGE(TAG, "Failed to create AFE processing task");
         afe_iface_->destroy(afe_data_);
         afe_data_ = nullptr;
