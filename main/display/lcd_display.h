@@ -107,6 +107,15 @@ protected:
     lv_obj_t* bright_overlay_slider_ = nullptr;
     lv_obj_t* bright_overlay_label_ = nullptr;
 
+    // Header Icon Color Overlay
+    lv_obj_t* header_color_overlay_card_ = nullptr;
+    lv_obj_t* preview_rot_label_ = nullptr;
+    lv_obj_t* preview_bright_label_ = nullptr;
+    lv_obj_t* preview_vol_label_ = nullptr;
+    lv_obj_t* preview_wifi_label_ = nullptr;
+    lv_obj_t* preview_bat_label_ = nullptr;
+    lv_obj_t* preview_bat_pct_label_ = nullptr;
+
     bool overlay_visible_ = false;
 
     // Modern Idle Dashboard (Jam, Hari, Tanggal, Bulan, Tahun, Suhu, Cuaca)
@@ -160,6 +169,7 @@ protected:
     void CreateControlCenter();
     void UpdateControlCenterValues();
     void UpdateTextSizeOverlayUI();
+    void UpdateHeaderColorOverlayUI();
 
     void InitializeLcdThemes();
     virtual bool Lock(int timeout_ms = 0) override;
@@ -216,6 +226,8 @@ public:
     void ShowVolumeOverlay();
     void ShowBrightnessOverlay();
     void ShowTextSizeOverlay();
+    void ShowHeaderColorOverlay();
+    virtual void SetHeaderIconColor(uint32_t color_hex) override;
     void HideOverlays();
     bool IsOverlayVisible() const { return overlay_visible_; }
 

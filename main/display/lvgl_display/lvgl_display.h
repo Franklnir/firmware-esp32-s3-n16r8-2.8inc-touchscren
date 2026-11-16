@@ -31,15 +31,19 @@ public:
     virtual bool AddTextGlyphs(const std::vector<TextGlyph>& glyphs, uint8_t bpp) override;
     virtual void ClearTextGlyphs() override;
     bool SetTextFont(std::shared_ptr<LvglFont> text_font);
+    virtual void SetHeaderIconColor(uint32_t color_hex);
+    virtual uint32_t GetHeaderIconColor() const { return header_icon_color_; }
 
 protected:
     esp_pm_lock_handle_t pm_lock_ = nullptr;
     lv_display_t* display_ = nullptr;
 
+    uint32_t header_icon_color_ = 0xFFFFFF;
     lv_obj_t* network_label_ = nullptr;
     lv_obj_t* status_label_ = nullptr;
     lv_obj_t* notification_label_ = nullptr;
     lv_obj_t* mute_label_ = nullptr;
+    lv_obj_t* br_icon_label_ = nullptr;
     lv_obj_t* battery_label_ = nullptr;
     lv_obj_t* battery_pct_label_ = nullptr;
     lv_obj_t* bluetooth_label_ = nullptr;

@@ -57,6 +57,8 @@ public:
     virtual bool SetUiThemeId(int theme_id) { return false; }
     virtual bool IsSt7789() const { return false; }
     virtual void SetIsSt7789(bool is_st7789) {}
+    virtual void SetHeaderIconColor(uint32_t color_hex) {}
+    virtual uint32_t GetHeaderIconColor() const { return 0xFFFFFF; }
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }

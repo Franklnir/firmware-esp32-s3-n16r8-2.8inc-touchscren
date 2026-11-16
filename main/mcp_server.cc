@@ -182,6 +182,38 @@ void McpServer::AddCommonTools() {
                 return result;
             });
 
+        AddTool("self.screen.set_header_icon_color",
+            "Ubah warna semua icon header di bar atas layar (rotasi, brightness, volume, wifi, baterai). "
+            "Pilihan warna: putih, biru, hijau, cyan, kuning, oranye, merah, ungu, pink, silver/abu, atau kode HEX (misal #38BDF8).",
+            PropertyList({
+                Property("color", kPropertyTypeString)
+            }),
+            [display](const PropertyList& properties) -> ReturnValue {
+                std::string color = properties["color"].value<std::string>();
+                std::string col_lower = color;
+                std::transform(col_lower.begin(), col_lower.end(), col_lower.begin(), ::tolower);
+                uint32_t icon_clr = 0xFFFFFF;
+                if (col_lower == "putih" || col_lower == "white") icon_clr = 0xFFFFFF;
+                else if (col_lower == "biru" || col_lower == "blue") icon_clr = 0x38BDF8;
+                else if (col_lower == "hijau" || col_lower == "green") icon_clr = 0x22C55E;
+                else if (col_lower == "cyan" || col_lower == "toska" || col_lower == "tosca") icon_clr = 0x06B6D4;
+                else if (col_lower == "kuning" || col_lower == "yellow") icon_clr = 0xFFE600;
+                else if (col_lower == "oranye" || col_lower == "orange" || col_lower == "jingga") icon_clr = 0xF97316;
+                else if (col_lower == "merah" || col_lower == "red") icon_clr = 0xEF4444;
+                else if (col_lower == "ungu" || col_lower == "purple") icon_clr = 0xA855F7;
+                else if (col_lower == "pink" || col_lower == "merah muda") icon_clr = 0xEC4899;
+                else if (col_lower == "silver" || col_lower == "abu" || col_lower == "gray" || col_lower == "grey") icon_clr = 0x94A3B8;
+                else if (col_lower.rfind("#", 0) == 0 && col_lower.length() >= 7) {
+                    icon_clr = (uint32_t)strtoul(col_lower.substr(1, 6).c_str(), nullptr, 16);
+                } else {
+                    return std::string("Pilihan warna tidak dikenali. Pilih: putih, biru, hijau, cyan, kuning, oranye, merah, ungu, pink, silver.");
+                }
+                display->SetHeaderIconColor(icon_clr);
+                char buf[64];
+                snprintf(buf, sizeof(buf), "Warna icon header berhasil diubah ke 0x%06X", (unsigned int)icon_clr);
+                return std::string(buf);
+            });
+
         AddTool("self.screen.set_theme",
             "GANTI TEMA TAMPILAN / TATA LETAK LAYAR (Theme Layout Mode):\n"
             "- Tema 2 ('2' / 'chat' / 'whatsapp' / 'wechat' / 'gambar'): Mode Tampilan Chat WhatsApp / WeChat (gelembung balon pesan chat hijau untuk user di kanan, putih untuk asisten di kiri, avatar kuning di kiri atas, baterai di samping wifi di kanan atas, persis seperti di gambar).\n"
@@ -206,6 +238,16 @@ void McpServer::AddCommonTools() {
                     t_lower.find("thema satu") != std::string::npos ||
                     t_lower.find("robot") != std::string::npos) {
                     target_id = 1;
+                } else if (t_lower == "2" || t_lower == "tema 2" || t_lower == "thema 2" || t_lower == "theme 2" ||
+                           t_lower == "dua" || t_lower.find("tema 2") != std::string::npos ||
+                           t_lower.find("thema 2") != std::string::npos ||
+                           t_lower.find("theme 2") != std::string::npos ||
+                           t_lower.find("tema dua") != std::string::npos ||
+                           t_lower.find("thema dua") != std::string::npos ||
+                           t_lower.find("chat") != std::string::npos ||
+                           t_lower.find("whatsapp") != std::string::npos ||
+                           t_lower.find("wechat") != std::string::npos) {
+                    target_id = 2;
                 } else if (t_lower == "switch" || t_lower == "toggle" || t_lower == "ganti" || t_lower.empty() ||
                            t_lower == "ganti tema" || t_lower == "ganti thema" || t_lower == "next") {
                     target_id = (display->GetUiThemeId() == 1) ? 2 : 1;

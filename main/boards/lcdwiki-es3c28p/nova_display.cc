@@ -9336,14 +9336,16 @@ void NovaDisplay::SetPianoInstrument(int mode) {
 void NovaDisplay::BuildPiano() {
     lv_obj_t* root = NewRoot();
     MakeHeader(root, "MINI PIANO", true);
+    lv_obj_clear_flag(root, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
 
     bool is_land = (width_ > 240);
-    int bar_y = is_land ? 34 : 36;
+    // Header height is 36px. Provide clean margin below header (bar_y = 42 for portrait, 40 for landscape)
+    int bar_y = is_land ? 40 : 42;
     int bar_h = is_land ? 22 : 24;
-    int btn_w = is_land ? 68 : 70;
+    int btn_w = is_land ? 66 : 70;
     int btn_h = bar_h;
-    int btn_gap = is_land ? 6 : 6;
-    int start_x = is_land ? 10 : 8;
+    int btn_gap = 6;
+    int start_x = is_land ? 10 : 9;
 
     static const char* kInstTitles[3] = {"Piano", "8-Bit", "Organ"};
     for (int i = 0; i < 3; ++i) {
@@ -9351,6 +9353,7 @@ void NovaDisplay::BuildPiano() {
         lv_obj_set_pos(piano_inst_btns_[i], start_x + i * (btn_w + btn_gap), bar_y);
         lv_obj_set_size(piano_inst_btns_[i], btn_w, btn_h);
         StyleButton(piano_inst_btns_[i], (i == piano_instrument_) ? C_CYAN : C_PANEL, C_BORDER, 6);
+        lv_obj_clear_flag(piano_inst_btns_[i], (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_t* lbl = MakeCenteredLabel(piano_inst_btns_[i], kInstTitles[i], 0, 0, btn_w, btn_h, FONT_10,
                                           (i == piano_instrument_) ? C_DARK : C_MUTED);
         lv_obj_center(lbl);
@@ -9364,16 +9367,16 @@ void NovaDisplay::BuildPiano() {
         lv_obj_set_user_data(piano_inst_btns_[i], (void*)(intptr_t)i);
     }
 
-    int lbl_y = is_land ? 34 : 64;
-    int lbl_x = is_land ? 232 : 8;
-    int lbl_w = is_land ? 80 : 224;
-    piano_status_lbl_ = MakeCenteredLabel(root, "Sentuh tuts untuk main", lbl_x, lbl_y, lbl_w, 20, FONT_10, C_CYAN);
+    int lbl_y = is_land ? 40 : 70;
+    int lbl_x = is_land ? 228 : 8;
+    int lbl_w = is_land ? 84 : 224;
+    piano_status_lbl_ = MakeCenteredLabel(root, "Sentuh tuts untuk main", lbl_x, lbl_y, lbl_w, 18, FONT_10, C_CYAN);
 
-    // Keys Container
-    int keys_x = is_land ? 4 : 4;
-    int keys_y = is_land ? 60 : 88;
+    // Keys Container - Fixed, static, non-scrollable piano keyboard
+    int keys_x = 4;
+    int keys_y = is_land ? 66 : 92;
     int keys_w = is_land ? 312 : 232;
-    int keys_h = is_land ? 144 : 194;
+    int keys_h = is_land ? 138 : 192;
 
     lv_obj_t* keys_cont = lv_obj_create(root);
     lv_obj_set_pos(keys_cont, keys_x, keys_y);
@@ -9383,6 +9386,8 @@ void NovaDisplay::BuildPiano() {
     lv_obj_set_style_radius(keys_cont, 8, LV_PART_MAIN);
     lv_obj_set_style_border_color(keys_cont, C_BORDER, LV_PART_MAIN);
     lv_obj_set_style_border_width(keys_cont, 1, LV_PART_MAIN);
+    lv_obj_clear_flag(keys_cont, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ELASTIC | LV_OBJ_FLAG_SCROLL_MOMENTUM | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
+    lv_obj_set_scrollbar_mode(keys_cont, LV_SCROLLBAR_MODE_OFF);
 
     // 8 White Keys: C4, D4, E4, F4, G4, A4, B4, C5
     int wk_w = keys_w / 8;
@@ -9399,6 +9404,7 @@ void NovaDisplay::BuildPiano() {
         lv_obj_set_style_border_width(piano_white_keys_[i], 1, LV_PART_MAIN);
         lv_obj_set_style_radius(piano_white_keys_[i], 4, LV_PART_MAIN);
         lv_obj_set_style_shadow_width(piano_white_keys_[i], 0, LV_PART_MAIN);
+        lv_obj_clear_flag(piano_white_keys_[i], (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
 
         lv_obj_t* klbl = lv_label_create(piano_white_keys_[i]);
         lv_label_set_text(klbl, kWkLabels[i]);
@@ -9434,6 +9440,7 @@ void NovaDisplay::BuildPiano() {
         lv_obj_set_style_border_width(piano_black_keys_[i], 1, LV_PART_MAIN);
         lv_obj_set_style_radius(piano_black_keys_[i], 3, LV_PART_MAIN);
         lv_obj_set_style_shadow_width(piano_black_keys_[i], 0, LV_PART_MAIN);
+        lv_obj_clear_flag(piano_black_keys_[i], (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
 
         lv_obj_t* klbl = lv_label_create(piano_black_keys_[i]);
         lv_label_set_text(klbl, kBkLabels[i]);

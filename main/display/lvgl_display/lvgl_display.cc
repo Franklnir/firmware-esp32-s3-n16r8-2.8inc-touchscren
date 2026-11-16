@@ -22,6 +22,8 @@
 #define TAG "Display"
 
 LvglDisplay::LvglDisplay() {
+    Settings disp_set("display", true);
+    header_icon_color_ = (uint32_t)disp_set.GetInt("hdr_icon_clr", 0xFFFFFF);
     dynamic_glyph_cache_ = std::make_unique<DynamicGlyphCache>();
     // Notification timer
     esp_timer_create_args_t notification_timer_args = {
@@ -198,17 +200,32 @@ void LvglDisplay::ShowNotification(const char* notification, int duration_ms) {
     ESP_ERROR_CHECK(esp_timer_start_once(notification_timer_, duration_ms * 1000));
 }
 
+void LvglDisplay::SetHeaderIconColor(uint32_t color_hex) {
+    header_icon_color_ = color_hex;
+    Settings disp_set("display", true);
+    disp_set.SetInt("hdr_icon_clr", (int)color_hex);
+    lv_color_t clr = lv_color_hex(color_hex);
+    DisplayLockGuard lock(this);
+    if (network_label_) lv_obj_set_style_text_color(network_label_, clr, 0);
+    if (mute_label_) lv_obj_set_style_text_color(mute_label_, clr, 0);
+    if (br_icon_label_) lv_obj_set_style_text_color(br_icon_label_, clr, 0);
+    if (battery_label_) lv_obj_set_style_text_color(battery_label_, clr, 0);
+    if (battery_pct_label_) lv_obj_set_style_text_color(battery_pct_label_, clr, 0);
+    if (bluetooth_label_) lv_obj_set_style_text_color(bluetooth_label_, clr, 0);
+    UpdateStatusBar(true);
+}
+
 void LvglDisplay::UpdateStatusBar(bool update_all) {
     auto& app = Application::GetInstance();
     auto& board = Board::GetInstance();
     auto codec = board.GetAudioCodec();
+    lv_color_t icon_clr = lv_color_hex(header_icon_color_);
 
     // 1. Bluetooth BLE status icon
     if (bluetooth_label_ != nullptr) {
         DisplayLockGuard lock(this);
-        bool ble_conn = board.GetBleConnected();
         lv_label_set_text(bluetooth_label_, MATERIAL_SYMBOLS_BLUETOOTH);
-        lv_obj_set_style_text_color(bluetooth_label_, ble_conn ? lv_color_hex(0x38BDF8) : lv_color_hex(0x64748B), 0);
+        lv_obj_set_style_text_color(bluetooth_label_, icon_clr, 0);
     }
 
     // 2. Mute / Speaker icon based on volume level
@@ -218,12 +235,17 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         if (vol == 0) {
             muted_ = true;
             lv_label_set_text(mute_label_, MATERIAL_SYMBOLS_VOLUME_OFF);
-            lv_obj_set_style_text_color(mute_label_, lv_color_hex(0x94A3B8), 0);
         } else {
             muted_ = false;
             lv_label_set_text(mute_label_, MATERIAL_SYMBOLS_VOLUME_UP);
-            lv_obj_set_style_text_color(mute_label_, lv_color_hex(0x06B6D4), 0);
         }
+        lv_obj_set_style_text_color(mute_label_, icon_clr, 0);
+    }
+
+    // 2b. Brightness icon
+    if (br_icon_label_ != nullptr) {
+        DisplayLockGuard lock(this);
+        lv_obj_set_style_text_color(br_icon_label_, icon_clr, 0);
     }
 
     // 3. Wi-Fi network icon & reconnecting status animation
@@ -240,27 +262,20 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
             if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
                 int8_t rssi = ap_info.rssi;
                 if (rssi >= -65) {
-                    // Strong signal (3 bars): Green
                     lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI);
-                    lv_obj_set_style_text_color(network_label_, lv_color_hex(0x22C55E), 0);
                 } else if (rssi >= -78) {
-                    // Medium signal (2 bars): Amber/Yellow
                     lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI_2_BAR);
-                    lv_obj_set_style_text_color(network_label_, lv_color_hex(0xEAB308), 0);
                 } else {
-                    // Weak signal (1 bar): Red/Coral
                     lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI_1_BAR);
-                    lv_obj_set_style_text_color(network_label_, lv_color_hex(0xEF4444), 0);
                 }
             } else {
                 lv_label_set_text(network_label_, MATERIAL_SYMBOLS_WIFI);
-                lv_obj_set_style_text_color(network_label_, lv_color_hex(0x22C55E), 0);
             }
         } else {
-            // Reconnecting amber alternating animation
+            // Reconnecting alternating animation
             lv_label_set_text(network_label_, (wifi_blink % 2 == 0) ? MATERIAL_SYMBOLS_REFRESH : MATERIAL_SYMBOLS_WIFI_OFF);
-            lv_obj_set_style_text_color(network_label_, lv_color_hex(0xF59E0B), 0);
         }
+        lv_obj_set_style_text_color(network_label_, icon_clr, 0);
     }
 
     // 4. Update Time & Auto-Poke SNTP when Wi-Fi is connected
@@ -356,13 +371,7 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
                 lv_obj_remove_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
                 battery_icon_ = icon;
                 lv_label_set_text(battery_label_, battery_icon_);
-                if (charging) {
-                    lv_obj_set_style_text_color(battery_label_, is_light_bg ? lv_color_hex(0xD97706) : lv_color_hex(0xF59E0B), 0);
-                } else if (battery_level <= 20) {
-                    lv_obj_set_style_text_color(battery_label_, is_light_bg ? lv_color_hex(0xDC2626) : lv_color_hex(0xFF8195), 0);
-                } else {
-                    lv_obj_set_style_text_color(battery_label_, is_light_bg ? lv_color_hex(0x475569) : lv_color_hex(0x7DE0B5), 0);
-                }
+                lv_obj_set_style_text_color(battery_label_, icon_clr, 0);
             }
         }
         if (battery_pct_label_ != nullptr) {
@@ -373,7 +382,7 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
                 char pct_str[16];
                 snprintf(pct_str, sizeof(pct_str), "%d%%", battery_level);
                 lv_label_set_text(battery_pct_label_, pct_str);
-                lv_obj_set_style_text_color(battery_pct_label_, is_light_bg ? lv_color_hex(0x475569) : lv_color_white(), 0);
+                lv_obj_set_style_text_color(battery_pct_label_, icon_clr, 0);
             }
         }
 
