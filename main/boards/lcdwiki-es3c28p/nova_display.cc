@@ -289,10 +289,14 @@ void NovaDisplay::UpdateResolvedTextColor() {
 }
 
 void NovaDisplay::ApplyHeaderIconColor(uint32_t color_hex, bool persist) {
+    if (header_icon_color_ == color_hex && !persist) return;
     header_icon_color_ = color_hex;
     if (persist) {
         Settings disp("display", true);
         disp.SetInt("hdr_icon_clr", (int)color_hex);
+        if (callbacks_.on_header_icon_color_changed) {
+            callbacks_.on_header_icon_color_changed(color_hex);
+        }
     }
     lv_color_t c = lv_color_hex(header_icon_color_);
     if (top_back_icon_) lv_obj_set_style_text_color(top_back_icon_, c, LV_PART_MAIN);
@@ -305,6 +309,7 @@ void NovaDisplay::ApplyHeaderIconColor(uint32_t color_hex, bool persist) {
     if (top_wifi_icon_) lv_obj_set_style_text_color(top_wifi_icon_, c, LV_PART_MAIN);
     if (top_battery_icon_) lv_obj_set_style_text_color(top_battery_icon_, c, LV_PART_MAIN);
     if (top_battery_label_) lv_obj_set_style_text_color(top_battery_label_, c, LV_PART_MAIN);
+    UpdateHeaderColorModalPreview();
 }
 
 void NovaDisplay::ApplyTextColor(const std::string& text_color_id, bool persist) {
@@ -469,7 +474,7 @@ void NovaDisplay::StyleButton(lv_obj_t* button, lv_color_t fill, lv_color_t bord
     lv_obj_set_style_shadow_width(button, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(button, 0, LV_PART_MAIN);
     lv_obj_set_style_outline_width(button, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(button, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(button, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
 }
 
 lv_obj_t* NovaDisplay::MakeButton(lv_obj_t* parent, const char* text,
@@ -668,6 +673,12 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
         lv_obj_center(top_br_icon_);
         lv_obj_set_user_data(br_btn, (void*)(intptr_t)PAGE_DISPLAY);
         lv_obj_add_event_cb(br_btn, OnNavClicked, LV_EVENT_CLICKED, this);
+        lv_obj_add_event_cb(br_btn, [](lv_event_t* e) {
+            if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (self) self->ShowHeaderColorModal();
+            }
+        }, LV_EVENT_LONG_PRESSED, this);
 
         title_x = 65;
         title_w = 52;
@@ -936,6 +947,7 @@ void NovaDisplay::CloseAllModals() {
     }
     CloseRgbMixerModal();
     CloseGamesModal();
+    CloseHeaderColorModal();
 }
 
 void NovaDisplay::ShowRecentAppsModal() {
@@ -1168,6 +1180,7 @@ void NovaDisplay::NavigateTo(Page next) {
         display_pal_scroll_x_ = 0;
         display_bg_scroll_x_ = 0;
         display_tc_scroll_x_ = 0;
+        display_hdr_scroll_x_ = 0;
     }
     if (next == PAGE_AUDIO && current_page_ != PAGE_AUDIO) {
         audio_scroll_y_ = 0;
@@ -1708,6 +1721,12 @@ void NovaDisplay::BuildQuick() {
         MakeLabel(disp_tile, "Terang", 28, 22, 40, 14, FONT_10, C_MUTED);
         lv_obj_set_user_data(disp_tile, (void*)(intptr_t)PAGE_DISPLAY);
         lv_obj_add_event_cb(disp_tile, OnNavClicked, LV_EVENT_CLICKED, this);
+        lv_obj_add_event_cb(disp_tile, [](lv_event_t* e) {
+            if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (self) self->ShowHeaderColorModal();
+            }
+        }, LV_EVENT_LONG_PRESSED, this);
 
         lv_obj_t* set_tile = lv_btn_create(root);
         lv_obj_set_pos(set_tile, 84, 88); lv_obj_set_size(set_tile, 72, 44);
@@ -1778,6 +1797,12 @@ void NovaDisplay::BuildQuick() {
         lv_label_set_long_mode(d_sub, LV_LABEL_LONG_SCROLL_CIRCULAR);
         lv_obj_set_user_data(disp_tile, (void*)(intptr_t)PAGE_DISPLAY);
         lv_obj_add_event_cb(disp_tile, OnNavClicked, LV_EVENT_CLICKED, this);
+        lv_obj_add_event_cb(disp_tile, [](lv_event_t* e) {
+            if (lv_event_get_code(e) == LV_EVENT_LONG_PRESSED) {
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (self) self->ShowHeaderColorModal();
+            }
+        }, LV_EVENT_LONG_PRESSED, this);
 
         lv_obj_t* set_tile = lv_btn_create(root);
         lv_obj_set_pos(set_tile, 126, 114); lv_obj_set_size(set_tile, 102, 50);
@@ -2430,6 +2455,195 @@ void NovaDisplay::CloseGamesModal() {
         lv_obj_del(games_modal_);
         games_modal_ = nullptr;
     }
+}
+
+void NovaDisplay::CloseHeaderColorModal() {
+    if (header_color_modal_) {
+        lv_obj_del(header_color_modal_);
+        header_color_modal_ = nullptr;
+        modal_prev_rot_ = nullptr;
+        modal_prev_br_ = nullptr;
+        modal_prev_bt_ = nullptr;
+        modal_prev_vol_ = nullptr;
+        modal_prev_wifi_ = nullptr;
+        modal_prev_bat_ = nullptr;
+        modal_prev_pct_ = nullptr;
+    }
+}
+
+void NovaDisplay::UpdateHeaderColorModalPreview() {
+    if (!header_color_modal_) return;
+    lv_color_t iclr = lv_color_hex(header_icon_color_);
+    if (modal_prev_rot_)  lv_obj_set_style_text_color(modal_prev_rot_, iclr, 0);
+    if (modal_prev_br_)   lv_obj_set_style_text_color(modal_prev_br_, iclr, 0);
+    if (modal_prev_bt_)   lv_obj_set_style_text_color(modal_prev_bt_, iclr, 0);
+    if (modal_prev_vol_)  lv_obj_set_style_text_color(modal_prev_vol_, iclr, 0);
+    if (modal_prev_wifi_) lv_obj_set_style_text_color(modal_prev_wifi_, iclr, 0);
+    if (modal_prev_bat_)  lv_obj_set_style_text_color(modal_prev_bat_, iclr, 0);
+    if (modal_prev_pct_)  lv_obj_set_style_text_color(modal_prev_pct_, iclr, 0);
+}
+
+void NovaDisplay::ShowHeaderColorModal() {
+    CloseHeaderColorModal();
+    lv_obj_t* root = lv_layer_top();
+    header_color_modal_ = lv_obj_create(root);
+    lv_obj_set_size(header_color_modal_, width_, height_);
+    lv_obj_clear_flag(header_color_modal_, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN));
+    lv_obj_set_style_bg_color(header_color_modal_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(header_color_modal_, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(header_color_modal_, 0, 0);
+    lv_obj_set_style_radius(header_color_modal_, 0, 0);
+
+    lv_obj_add_event_cb(header_color_modal_, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        if (lv_event_get_target(e) == lv_event_get_current_target(e)) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->CloseHeaderColorModal();
+        }
+    }, LV_EVENT_CLICKED, this);
+
+    bool is_land = (width_ > 240);
+    int card_w = is_land ? 276 : 228;
+    int card_h = is_land ? 204 : 226;
+
+    lv_obj_t* card = MakePanel(header_color_modal_, 0, 0, card_w, card_h, C_PANEL, C_CYAN, 12);
+    lv_obj_align(card, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_clear_flag(card, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN));
+
+    // Title
+    MakeLabel(card, "🎨 WARNA IKON HEADER", 10, 8, card_w - 46, 18, FONT_12, C_CYAN);
+
+    // Close button (✕)
+    lv_obj_t* close_btn = lv_btn_create(card);
+    lv_obj_set_size(close_btn, 22, 22);
+    lv_obj_set_pos(close_btn, card_w - 30, 6);
+    StyleButton(close_btn, C_PANEL, C_BORDER, 6);
+    lv_obj_set_style_pad_all(close_btn, 0, 0);
+    lv_obj_t* x_lbl = lv_label_create(close_btn);
+    lv_label_set_text(x_lbl, "✕");
+    lv_obj_set_style_text_font(x_lbl, FONT_10, 0);
+    lv_obj_set_style_text_color(x_lbl, C_MUTED, 0);
+    lv_obj_center(x_lbl);
+    lv_obj_add_event_cb(close_btn, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+        auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+        if (self) self->CloseHeaderColorModal();
+    }, LV_EVENT_CLICKED, this);
+
+    // Live Preview Bar Strip
+    lv_obj_t* prev_box = lv_obj_create(card);
+    lv_obj_set_pos(prev_box, 8, 30);
+    lv_obj_set_size(prev_box, card_w - 16, 30);
+    lv_obj_set_style_bg_color(prev_box, C_DARK, 0);
+    lv_obj_set_style_border_color(prev_box, C_BORDER, 0);
+    lv_obj_set_style_border_width(prev_box, 1, 0);
+    lv_obj_set_style_radius(prev_box, 6, 0);
+    lv_obj_set_style_pad_all(prev_box, 0, 0);
+    lv_obj_set_style_pad_hor(prev_box, 8, 0);
+    lv_obj_clear_flag(prev_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN));
+    lv_obj_set_flex_flow(prev_box, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(prev_box, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_color_t iclr = lv_color_hex(header_icon_color_);
+
+    modal_prev_rot_ = lv_label_create(prev_box);
+    lv_label_set_text(modal_prev_rot_, MATERIAL_SYMBOLS_REFRESH);
+    lv_obj_set_style_text_font(modal_prev_rot_, FONT_ICON, 0);
+    lv_obj_set_style_text_color(modal_prev_rot_, iclr, 0);
+
+    modal_prev_br_ = lv_label_create(prev_box);
+    lv_label_set_text(modal_prev_br_, MATERIAL_SYMBOLS_BRIGHTNESS_6);
+    lv_obj_set_style_text_font(modal_prev_br_, FONT_ICON, 0);
+    lv_obj_set_style_text_color(modal_prev_br_, iclr, 0);
+
+    modal_prev_bt_ = lv_label_create(prev_box);
+    lv_label_set_text(modal_prev_bt_, MATERIAL_SYMBOLS_BLUETOOTH);
+    lv_obj_set_style_text_font(modal_prev_bt_, FONT_ICON, 0);
+    lv_obj_set_style_text_color(modal_prev_bt_, iclr, 0);
+
+    modal_prev_vol_ = lv_label_create(prev_box);
+    lv_label_set_text(modal_prev_vol_, MATERIAL_SYMBOLS_VOLUME_UP);
+    lv_obj_set_style_text_font(modal_prev_vol_, FONT_ICON, 0);
+    lv_obj_set_style_text_color(modal_prev_vol_, iclr, 0);
+
+    modal_prev_wifi_ = lv_label_create(prev_box);
+    lv_label_set_text(modal_prev_wifi_, MATERIAL_SYMBOLS_WIFI);
+    lv_obj_set_style_text_font(modal_prev_wifi_, FONT_ICON, 0);
+    lv_obj_set_style_text_color(modal_prev_wifi_, iclr, 0);
+
+    modal_prev_bat_ = lv_label_create(prev_box);
+    lv_label_set_text(modal_prev_bat_, MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL);
+    lv_obj_set_style_text_font(modal_prev_bat_, FONT_ICON, 0);
+    lv_obj_set_style_text_color(modal_prev_bat_, iclr, 0);
+
+    modal_prev_pct_ = lv_label_create(prev_box);
+    lv_label_set_text(modal_prev_pct_, "100%");
+    lv_obj_set_style_text_font(modal_prev_pct_, FONT_10, 0);
+    lv_obj_set_style_text_color(modal_prev_pct_, iclr, 0);
+
+    // 10-Color Palette Container (2 rows of 5 dots)
+    lv_obj_t* pal_grid = lv_obj_create(card);
+    lv_obj_set_pos(pal_grid, 8, 66);
+    lv_obj_set_size(pal_grid, card_w - 16, is_land ? 94 : 114);
+    lv_obj_set_style_bg_opa(pal_grid, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(pal_grid, 0, 0);
+    lv_obj_set_style_pad_all(pal_grid, 2, 0);
+    lv_obj_set_flex_flow(pal_grid, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(pal_grid, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_row(pal_grid, 6, 0);
+    lv_obj_set_style_pad_column(pal_grid, 6, 0);
+    lv_obj_clear_flag(pal_grid, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_SCROLL_CHAIN));
+
+    static const uint32_t kModalColors[] = {
+        0xFFFFFF, 0x38BDF8, 0x22C55E, 0x06B6D4, 0xFFE600,
+        0xF97316, 0xEF4444, 0xA855F7, 0xEC4899, 0x94A3B8
+    };
+
+    int dot_sz = is_land ? 28 : 32;
+    for (size_t i = 0; i < sizeof(kModalColors)/sizeof(kModalColors[0]); ++i) {
+        lv_obj_t* dot = lv_btn_create(pal_grid);
+        lv_obj_set_size(dot, dot_sz, dot_sz);
+        lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(dot, lv_color_hex(kModalColors[i]), 0);
+        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+        lv_obj_set_style_shadow_width(dot, 0, 0);
+        bool is_act = (header_icon_color_ == kModalColors[i]);
+        lv_obj_set_style_border_width(dot, is_act ? 3 : 1, 0);
+        lv_obj_set_style_border_color(dot, is_act ? lv_color_white() : lv_color_hex(0x475569), 0);
+        lv_obj_set_style_pad_all(dot, 0, 0);
+        lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
+        lv_obj_set_user_data(dot, (void*)(uintptr_t)kModalColors[i]);
+
+        lv_obj_add_event_cb(dot, [](lv_event_t* e) {
+            if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (!self) return;
+            uint32_t clr = (uint32_t)(uintptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+            self->ApplyHeaderIconColor(clr, true);
+            if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
+
+            // Update border highlight on all dots inside pal_grid
+            lv_obj_t* p = lv_obj_get_parent((lv_obj_t*)lv_event_get_target(e));
+            if (p) {
+                uint32_t cnt = lv_obj_get_child_cnt(p);
+                for (uint32_t ci = 0; ci < cnt; ++ci) {
+                    lv_obj_t* ch = lv_obj_get_child(p, ci);
+                    uint32_t d_clr = (uint32_t)(uintptr_t)lv_obj_get_user_data(ch);
+                    bool act = (d_clr == clr);
+                    lv_obj_set_style_border_width(ch, act ? 3 : 1, 0);
+                    lv_obj_set_style_border_color(ch, act ? lv_color_white() : lv_color_hex(0x475569), 0);
+                }
+            }
+        }, LV_EVENT_CLICKED, this);
+    }
+
+    // Bottom Close Button
+    MakeButton(card, "SELESAI", 8, card_h - 34, card_w - 16, 26, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        [](lv_event_t* e) {
+            if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->CloseHeaderColorModal();
+        }, this);
 }
 
 void NovaDisplay::ShowGamesModal() {
@@ -3468,7 +3682,10 @@ void NovaDisplay::BuildDisplay() {
         if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
         auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
         if (!self) return;
-        int w = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+        lv_obj_t* p_list = lv_obj_get_parent(target);
+        if (p_list) self->display_scroll_y_ = lv_obj_get_scroll_y(p_list);
+        int w = (int)(intptr_t)lv_obj_get_user_data(target);
         self->ApplyTextWeight(w, true);
         if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
     };
@@ -3477,7 +3694,10 @@ void NovaDisplay::BuildDisplay() {
         if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
         auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
         if (!self) return;
-        int c = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+        lv_obj_t* p_list = lv_obj_get_parent(target);
+        if (p_list) self->display_scroll_y_ = lv_obj_get_scroll_y(p_list);
+        int c = (int)(intptr_t)lv_obj_get_user_data(target);
         self->ApplyContrast(c, true);
         if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
     };
@@ -3486,7 +3706,10 @@ void NovaDisplay::BuildDisplay() {
         if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
         auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
         if (!self) return;
-        int s = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+        lv_obj_t* p_list = lv_obj_get_parent(target);
+        if (p_list) self->display_scroll_y_ = lv_obj_get_scroll_y(p_list);
+        int s = (int)(intptr_t)lv_obj_get_user_data(target);
         self->ApplySharpness(s, true);
         if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
     };
@@ -3495,7 +3718,10 @@ void NovaDisplay::BuildDisplay() {
         if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
         auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
         if (!self) return;
-        int m = (int)(intptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
+        lv_obj_t* target = (lv_obj_t*)lv_event_get_target(e);
+        lv_obj_t* p_list = lv_obj_get_parent(target);
+        if (p_list) self->display_scroll_y_ = lv_obj_get_scroll_y(p_list);
+        int m = (int)(intptr_t)lv_obj_get_user_data(target);
         self->SetIconColorMode((uint8_t)m);
         if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
         self->BuildDisplay();
@@ -3507,6 +3733,7 @@ void NovaDisplay::BuildDisplay() {
         lv_color_t txt_col = active ? C_BG : C_TEXT;
         lv_obj_t* btn = MakeButton(p, label, x, y, w, h, fill, border, txt_col, FONT_10, cb, this);
         lv_obj_set_user_data(btn, (void*)(intptr_t)val);
+        lv_obj_clear_flag(btn, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
         if (active) {
             lv_obj_set_style_border_width(btn, 2, LV_PART_MAIN);
         }
@@ -3577,6 +3804,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(pal_box, 2, 0);
         lv_obj_set_style_pad_column(pal_box, 4, 0);
         lv_obj_set_scroll_dir(pal_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(pal_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(pal_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(pal_box, LV_SCROLLBAR_MODE_OFF);
 
         size_t theme_count = 0;
@@ -3592,6 +3821,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(themes[i].border_color), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
             lv_obj_set_user_data(dot, (void*)(intptr_t)i);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -3601,6 +3831,13 @@ void NovaDisplay::BuildDisplay() {
                 size_t count = 0;
                 const auto* th_table = GetThemeSyncTable(&count);
                 if (idx >= 0 && idx < (int)count) {
+                    lv_obj_t* target_dot = (lv_obj_t*)lv_event_get_target(e);
+                    lv_obj_t* p_box = lv_obj_get_parent(target_dot);
+                    if (p_box) {
+                        self->display_pal_scroll_x_ = lv_obj_get_scroll_x(p_box);
+                        lv_obj_t* p_list = lv_obj_get_parent(p_box);
+                        if (p_list) self->display_scroll_y_ = lv_obj_get_scroll_y(p_list);
+                    }
                     self->ApplyTheme(th_table[idx].theme_name, true);
                     if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
                 }
@@ -3621,6 +3858,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(bg_box, 2, 0);
         lv_obj_set_style_pad_column(bg_box, 4, 0);
         lv_obj_set_scroll_dir(bg_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(bg_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(bg_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(bg_box, LV_SCROLLBAR_MODE_OFF);
 
         size_t bg_count = 0;
@@ -3636,6 +3875,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
             lv_obj_set_user_data(dot, (void*)(intptr_t)i);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
                 if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
@@ -3645,6 +3885,13 @@ void NovaDisplay::BuildDisplay() {
                 size_t count = 0;
                 const auto* bg_table = GetBackgroundTable(&count);
                 if (idx >= 0 && idx < (int)count) {
+                    lv_obj_t* target_dot = (lv_obj_t*)lv_event_get_target(e);
+                    lv_obj_t* p_box = lv_obj_get_parent(target_dot);
+                    if (p_box) {
+                        self->display_bg_scroll_x_ = lv_obj_get_scroll_x(p_box);
+                        lv_obj_t* p_list = lv_obj_get_parent(p_box);
+                        if (p_list) self->display_scroll_y_ = lv_obj_get_scroll_y(p_list);
+                    }
                     self->ApplyBackground(bg_table[idx].id, true);
                     if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
                 }
@@ -3672,6 +3919,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(tc_box, 2, 0);
         lv_obj_set_style_pad_column(tc_box, 4, 0);
         lv_obj_set_scroll_dir(tc_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(tc_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(tc_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(tc_box, LV_SCROLLBAR_MODE_OFF);
 
         size_t tc_count = 0;
@@ -3687,6 +3936,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
 
             if (strcmp(tcs[i].id, "auto") == 0) {
                 lv_obj_t* albl = lv_label_create(dot);
@@ -3705,6 +3955,13 @@ void NovaDisplay::BuildDisplay() {
                 size_t count = 0;
                 const auto* tc_table = GetTextColorTable(&count);
                 if (idx >= 0 && idx < (int)count) {
+                    lv_obj_t* target_dot = (lv_obj_t*)lv_event_get_target(e);
+                    lv_obj_t* p_box = lv_obj_get_parent(target_dot);
+                    if (p_box) {
+                        self->display_tc_scroll_x_ = lv_obj_get_scroll_x(p_box);
+                        lv_obj_t* p_list = lv_obj_get_parent(p_box);
+                        if (p_list) self->display_scroll_y_ = lv_obj_get_scroll_y(p_list);
+                    }
                     self->ApplyTextColor(tc_table[idx].id, true);
                     if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
                 }
@@ -3759,6 +4016,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(hdr_box, 2, 0);
         lv_obj_set_style_pad_column(hdr_box, 4, 0);
         lv_obj_set_scroll_dir(hdr_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(hdr_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(hdr_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(hdr_box, LV_SCROLLBAR_MODE_OFF);
 
         static const uint32_t kHdrColors[] = {
@@ -3776,6 +4035,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
 
             lv_obj_set_user_data(dot, (void*)(uintptr_t)kHdrColors[i]);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
@@ -3785,9 +4045,56 @@ void NovaDisplay::BuildDisplay() {
                 uint32_t clr = (uint32_t)(uintptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
                 self->ApplyHeaderIconColor(clr, true);
                 if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
-                self->BuildDisplay();
+
+                // Update active border without page rebuild
+                lv_obj_t* p_box = lv_obj_get_parent((lv_obj_t*)lv_event_get_target(e));
+                if (p_box) {
+                    uint32_t c_cnt = lv_obj_get_child_cnt(p_box);
+                    for (uint32_t ci = 0; ci < c_cnt; ++ci) {
+                        lv_obj_t* ch = lv_obj_get_child(p_box, ci);
+                        uint32_t c_clr = (uint32_t)(uintptr_t)lv_obj_get_user_data(ch);
+                        bool act = (c_clr == clr);
+                        lv_obj_set_style_border_width(ch, act ? 2 : 1, 0);
+                        lv_obj_set_style_border_color(ch, act ? lv_color_white() : lv_color_hex(0x475569), 0);
+                    }
+                }
             }, LV_EVENT_CLICKED, this);
         }
+
+        MakeButton(right_list, "🎨 POPUP PALET HEADER", 2, 402, 148, 22, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+            [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (self) self->ShowHeaderColorModal();
+            }, this);
+
+        lv_obj_add_event_cb(right_list, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->display_scroll_y_ = lv_obj_get_scroll_y((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
+        lv_obj_add_event_cb(pal_box, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->display_pal_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
+        lv_obj_add_event_cb(bg_box, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->display_bg_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
+        lv_obj_add_event_cb(tc_box, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->display_tc_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
+        lv_obj_add_event_cb(hdr_box, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->display_hdr_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
+
+        lv_obj_update_layout(root);
+        if (display_scroll_y_ > 0)     lv_obj_scroll_to_y(right_list, display_scroll_y_, LV_ANIM_OFF);
+        if (display_pal_scroll_x_ > 0) lv_obj_scroll_to_x(pal_box, display_pal_scroll_x_, LV_ANIM_OFF);
+        if (display_bg_scroll_x_ > 0)  lv_obj_scroll_to_x(bg_box, display_bg_scroll_x_, LV_ANIM_OFF);
+        if (display_tc_scroll_x_ > 0)  lv_obj_scroll_to_x(tc_box, display_tc_scroll_x_, LV_ANIM_OFF);
+        if (display_hdr_scroll_x_ > 0) lv_obj_scroll_to_x(hdr_box, display_hdr_scroll_x_, LV_ANIM_OFF);
 
     } else {
         // === PORTRAIT LAYOUT (240x320) WITH SMOOTH SCROLLING ===
@@ -3797,7 +4104,7 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_bottom(list, 260, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 300, LV_PART_MAIN);
         lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
@@ -3848,6 +4155,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(pal_box, 3, 0);
         lv_obj_set_style_pad_column(pal_box, 6, 0);
         lv_obj_set_scroll_dir(pal_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(pal_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(pal_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(pal_box, LV_SCROLLBAR_MODE_OFF);
 
         size_t theme_count = 0;
@@ -3863,6 +4172,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(themes[i].border_color), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
 
             lv_obj_set_user_data(dot, (void*)(intptr_t)i);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
@@ -3901,6 +4211,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(bg_box, 3, 0);
         lv_obj_set_style_pad_column(bg_box, 6, 0);
         lv_obj_set_scroll_dir(bg_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(bg_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(bg_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(bg_box, LV_SCROLLBAR_MODE_OFF);
 
         size_t bg_count = 0;
@@ -3916,6 +4228,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
 
             lv_obj_set_user_data(dot, (void*)(intptr_t)i);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
@@ -3968,6 +4281,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(tc_box, 3, 0);
         lv_obj_set_style_pad_column(tc_box, 6, 0);
         lv_obj_set_scroll_dir(tc_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(tc_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(tc_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(tc_box, LV_SCROLLBAR_MODE_OFF);
 
         size_t tc_count = 0;
@@ -3983,6 +4298,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
 
             if (strcmp(tcs[i].id, "auto") == 0) {
                 lv_obj_t* albl = lv_label_create(dot);
@@ -4070,6 +4386,8 @@ void NovaDisplay::BuildDisplay() {
         lv_obj_set_style_pad_all(hdr_box, 3, 0);
         lv_obj_set_style_pad_column(hdr_box, 6, 0);
         lv_obj_set_scroll_dir(hdr_box, LV_DIR_HOR);
+        lv_obj_set_scroll_snap_x(hdr_box, LV_SCROLL_SNAP_NONE);
+        lv_obj_clear_flag(hdr_box, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_CHAIN | LV_OBJ_FLAG_SCROLL_CHAIN_HOR | LV_OBJ_FLAG_SCROLL_CHAIN_VER));
         lv_obj_set_scrollbar_mode(hdr_box, LV_SCROLLBAR_MODE_OFF);
 
         static const uint32_t kHdrColorsPort[] = {
@@ -4087,6 +4405,7 @@ void NovaDisplay::BuildDisplay() {
             lv_obj_set_style_border_width(dot, is_active ? 2 : 1, 0);
             lv_obj_set_style_border_color(dot, is_active ? lv_color_white() : lv_color_hex(0x475569), 0);
             lv_obj_set_style_pad_all(dot, 0, 0);
+            lv_obj_clear_flag(dot, (lv_obj_flag_t)(LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_SCROLL_CHAIN));
 
             lv_obj_set_user_data(dot, (void*)(uintptr_t)kHdrColorsPort[i]);
             lv_obj_add_event_cb(dot, [](lv_event_t* e) {
@@ -4096,12 +4415,31 @@ void NovaDisplay::BuildDisplay() {
                 uint32_t clr = (uint32_t)(uintptr_t)lv_obj_get_user_data((lv_obj_t*)lv_event_get_target(e));
                 self->ApplyHeaderIconColor(clr, true);
                 if (self->callbacks_.trigger_click) self->callbacks_.trigger_click();
-                self->BuildDisplay();
+
+                // Update active border highlight without page rebuild
+                lv_obj_t* p_box = lv_obj_get_parent((lv_obj_t*)lv_event_get_target(e));
+                if (p_box) {
+                    uint32_t c_cnt = lv_obj_get_child_cnt(p_box);
+                    for (uint32_t ci = 0; ci < c_cnt; ++ci) {
+                        lv_obj_t* ch = lv_obj_get_child(p_box, ci);
+                        uint32_t c_clr = (uint32_t)(uintptr_t)lv_obj_get_user_data(ch);
+                        bool act = (c_clr == clr);
+                        lv_obj_set_style_border_width(ch, act ? 2 : 1, 0);
+                        lv_obj_set_style_border_color(ch, act ? lv_color_white() : lv_color_hex(0x475569), 0);
+                    }
+                }
             }, LV_EVENT_CLICKED, this);
         }
 
-        // Section 9: Screen Rotation Button
-        MakeButton(list, "ROTASI LAYAR 90°", 12, 712, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+        // Section 9: Screen Rotation Button & Header Color Modal Button
+        MakeButton(list, "🎨 PALET POPUP IKON HEADER", 12, 708, 216, 28, C_PANEL, C_CYAN, C_CYAN, FONT_10,
+            [](lv_event_t* e) {
+                if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+                auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+                if (self) self->ShowHeaderColorModal();
+            }, this);
+
+        MakeButton(list, "ROTASI LAYAR 90°", 12, 742, 216, 32, C_PANEL, C_CYAN, C_CYAN, FONT_10,
             [](lv_event_t* e) {
                 (void)e;
                 Board::GetInstance().RotateDisplay();
@@ -4123,12 +4461,17 @@ void NovaDisplay::BuildDisplay() {
             auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
             if (self) self->display_tc_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
         }, LV_EVENT_SCROLL, this);
+        lv_obj_add_event_cb(hdr_box, [](lv_event_t* e) {
+            auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
+            if (self) self->display_hdr_scroll_x_ = lv_obj_get_scroll_x((lv_obj_t*)lv_event_get_target(e));
+        }, LV_EVENT_SCROLL, this);
 
         lv_obj_update_layout(root);
         if (display_scroll_y_ > 0)     lv_obj_scroll_to_y(list, display_scroll_y_, LV_ANIM_OFF);
         if (display_pal_scroll_x_ > 0) lv_obj_scroll_to_x(pal_box, display_pal_scroll_x_, LV_ANIM_OFF);
         if (display_bg_scroll_x_ > 0)  lv_obj_scroll_to_x(bg_box, display_bg_scroll_x_, LV_ANIM_OFF);
         if (display_tc_scroll_x_ > 0)  lv_obj_scroll_to_x(tc_box, display_tc_scroll_x_, LV_ANIM_OFF);
+        if (display_hdr_scroll_x_ > 0) lv_obj_scroll_to_x(hdr_box, display_hdr_scroll_x_, LV_ANIM_OFF);
     }
 
     MakeBottomNav(root, PAGE_DISPLAY);

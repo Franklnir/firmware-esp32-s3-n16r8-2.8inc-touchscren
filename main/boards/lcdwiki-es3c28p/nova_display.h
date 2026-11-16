@@ -68,6 +68,7 @@ struct NovaCallbacks {
     std::function<void()> trigger_click;
     std::function<void(int sound_id)> play_sound;
     std::function<float()> get_temperature;
+    std::function<void(uint32_t color_hex)> on_header_icon_color_changed;
 };
 
 class NovaDisplay {
@@ -187,6 +188,9 @@ public:
 
     void ApplyHeaderIconColor(uint32_t color_hex, bool persist = true);
     uint32_t GetHeaderIconColor() const { return header_icon_color_; }
+    void ShowHeaderColorModal();
+    void CloseHeaderColorModal();
+    void UpdateHeaderColorModalPreview();
 
     bool IsNotifSoundEnabled() const;
     void SetNotifSoundEnabled(bool en);
@@ -722,12 +726,23 @@ private:
     int display_pal_scroll_x_ = 0;
     int display_bg_scroll_x_ = 0;
     int display_tc_scroll_x_ = 0;
+    int display_hdr_scroll_x_ = 0;
     int audio_scroll_y_ = 0;
 
     // --- Display & Theme Enhancements State ---
     int contrast_level_ = 1;
     int sharpness_level_ = 1;
     int text_weight_ = 0;
+
+    // --- Header Icon Color Modal State ---
+    lv_obj_t* header_color_modal_ = nullptr;
+    lv_obj_t* modal_prev_rot_ = nullptr;
+    lv_obj_t* modal_prev_br_ = nullptr;
+    lv_obj_t* modal_prev_bt_ = nullptr;
+    lv_obj_t* modal_prev_vol_ = nullptr;
+    lv_obj_t* modal_prev_wifi_ = nullptr;
+    lv_obj_t* modal_prev_bat_ = nullptr;
+    lv_obj_t* modal_prev_pct_ = nullptr;
 
     // --- RGB Mixer Modal State ---
     lv_obj_t* rgb_modal_ = nullptr;

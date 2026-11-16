@@ -2601,6 +2601,7 @@ void LcdDisplay::UpdateHeaderColorOverlayUI() {
 
 void LcdDisplay::SetHeaderIconColor(uint32_t color_hex) {
     DisplayLockGuard lock(this);
+    if (header_icon_color_ == color_hex) return;
     header_icon_color_ = color_hex;
     Settings disp_set("display", true);
     disp_set.SetInt("hdr_icon_clr", (int)color_hex);

@@ -1948,6 +1948,11 @@ private:
         cb.get_temperature = [this]() -> float {
             return GetChipTemperature();
         };
+        cb.on_header_icon_color_changed = [this](uint32_t clr) {
+            if (display_) {
+                display_->SetHeaderIconColor(clr);
+            }
+        };
 
         // Otomatis deteksi & mount MicroSD saat Nova OS aktif
         sd_card_manager_.Mount();
