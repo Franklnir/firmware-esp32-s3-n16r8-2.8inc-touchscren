@@ -463,56 +463,106 @@ void McpServer::AddCommonTools() {
     }
 #endif
 
-    AddTool("self.search_music",
-        "CARI INFORMASI LAGU YOUTUBE (Search YouTube Song Info & Duration):\n"
-        "Gunakan tool ini ketika pengguna meminta MEMUTAR ATAU MENDOWNLOAD lagu (seperti 'putar lagu [judul]', 'download lagu [judul]', 'simpan lagu [judul] ke memori', dsb.) untuk mencari tahu judul lengkap resmi dan durasi lagu di YouTube SEBELUM menanyakan konfirmasi ke pengguna.\n"
-        "Tool ini menghubungi YouTube dan mengembalikan informasi lagu (judul resmi, durasi, video ID).\n"
+    AddTool("self.check_music",
+        "CARI & PERIKSA INFO LAGU YOUTUBE (Search & Check YouTube Song Info):\n"
+        "WAJIB DIPANGGIL PERTAMA KALI setiap kali pengguna meminta memutar lagu/musik (misal: 'putar lagu [judul]', 'mainkan lagu [artis]', 'setel musik di youtube', 'play lagu', 'dengarkan musik', dll).\n"
+        "Tool ini akan memeriksa ketersediaan lagu di YouTube, mengambil judul resmi video dan durasinya.\n"
+        "PANDUAN ALUR (SANGAT PENTING):\n"
+        "1. Panggil tool ini terlebih dahulu untuk mendapatkan judul dan info lagu dari YouTube.\n"
+        "2. SETELAH MENDAPATKAN INFO LAGU, KAMU WAJIB MENANYAKAN KONFIRMASI KEPADA PENGGUNA TERLEBIH DAHULU!\n"
+        "   Contoh: 'Saya menemukan lagu \"[Judul Lagu]\" di YouTube (durasi [Durasi]). Apakah kamu ingin saya memutarnya sekarang?'\n"
+        "3. JANGAN LANGSUNG MEMUTAR LAGU sebelum pengguna memberikan konfirmasi persetujuan (seperti 'ya', 'yes', 'putar', 'lanjut', 'oke', 'iya')!\n"
+        "4. Hanya setelah pengguna mengonfirmasi (menjawab Ya/Putar), kamu baru memanggil tool `self.play_music`.\n"
         "Args:\n"
-        "  `query`: Judul lagu atau kata kunci pencarian yang diminta pengguna (misal: 'alan walker faded', 'tulus teh hijau').\n"
-        "Return:\n"
-        "  JSON berisi 'title' (judul resmi lengkap), 'duration' (format menit:detik, misal '3:48' atau '3:33'), 'video_id', dan status pencarian.",
+        "  `query`: Judul lagu, nama artis/penyanyi, atau kata kunci pencarian YouTube.",
         PropertyList({Property("query", kPropertyTypeString)}),
         [](const PropertyList& properties) -> ReturnValue {
             auto query = properties["query"].value<std::string>();
             std::string video_id, title, duration;
-            bool ok = YouTubeAudioPoller::GetInstance().FetchSongInfo(query, video_id, title, duration);
-            cJSON* root = cJSON_CreateObject();
-            cJSON_AddBoolToObject(root, "found", ok);
-            cJSON_AddStringToObject(root, "query", query.c_str());
-            cJSON_AddStringToObject(root, "title", ok ? title.c_str() : query.c_str());
-            cJSON_AddStringToObject(root, "duration", (!duration.empty()) ? duration.c_str() : "sekitar 3-4 menit");
-            cJSON_AddStringToObject(root, "video_id", video_id.c_str());
-            char* json_str = cJSON_PrintUnformatted(root);
-            std::string result(json_str ? json_str : "{}");
-            if (json_str) free(json_str);
-            cJSON_Delete(root);
-            return result;
+            bool found = YouTubeAudioPoller::GetInstance().SearchSong(query, video_id, title, duration);
+            if (!found) {
+                return "Lagu dengan pencarian '" + query + "' tidak ditemukan di YouTube. Silakan tanyakan kepada pengguna apakah ingin mencari judul lain.";
+            }
+            std::string res = "Lagu ditemukan di YouTube!\n- Judul: " + title + "\n- Video ID: " + video_id;
+            if (!duration.empty()) {
+                res += "\n- Durasi: " + duration;
+            }
+            res += "\n\nINSTRUKSI WAJIB: JANGAN langsung memutar lagu ini! Sekarang tanyakan konfirmasi kepada pengguna: sebutkan judul lagunya (\"" + title + "\")" + (duration.empty() ? "" : " dan durasi (" + duration + ")") + ", lalu tanyakan apakah pengguna ingin memutarnya. Tunggu jawaban pengguna. Jika pengguna menjawab 'ya'/'putar'/'lanjut', panggil tool self.play_music.";
+            return res;
         });
 
-    AddTool("self.play_music",
-        "PUTAR MUSIK / LAGU DARI YOUTUBE (Play Music / YouTube Song):\n"
-        "Gunakan tool ini untuk memutar lagu atau musik dari YouTube melalui speaker perangkat.\n"
-        "PENTING (ALUR WAJIB KONFIRMASI DENGAN JUDUL & DURASI LAGU):\n"
-        "1. KETIKA PENGGUNA MEMINTA MEMUTAR LAGU (misal: 'putar lagu Alan Walker Faded', 'setel lagu Tulus', 'play youtube', dsb.):\n"
-        "   - JANGAN LANGSUNG MEMUTAR LAGU!\n"
-        "   - Panggil tool 'self.search_music' terlebih dahulu untuk mencari tahu informasi lagu di YouTube (judul lengkap resmi dan durasinya).\n"
-        "   - Setelah mendapatkan informasi lagu (atau jika kamu sudah tahu detail lagunya), tanyakan konfirmasi kepada pengguna dengan menyebutkan judul lengkap dan durasinya secara ramah, contoh:\n"
-        "     'Apakah kamu mau memutar lagu berdurasi [durasi, misal: 3 menit 33 detik] dengan judul \"[Judul Lengkap Lagu]\" di YouTube? Jawab ya atau lanjut untuk memutar, atau batal untuk membatalkan.'\n"
-        "2. HANYA PANGGIL TOOL 'self.play_music' SETELAH PENGGUNA MEMBERIKAN KONFIRMASI SETUJU (misal pengguna menjawab: 'ya', 'yes', 'putar', 'lanjut', 'oke', 'mainkan', 'silakan', 'setuju').\n"
-        "3. JIKA PENGGUNA MEMBATALKAN (misal: 'batal', 'jangan', 'tidak', 'enggak jadi'), JANGAN panggil tool ini dan sampaikan bahwa pemutaran lagu dibatalkan.\n"
-        "4. KETIKA LAGU SELESAI DIPUTAR, sistem perangkat akan otomatis memberi tahu bahwa lagu telah selesai. Tugasmu adalah langsung bicara menyapa pengguna dengan ramah, beritahukan bahwa lagunya sudah selesai diputar, lalu tanyakan tanggapan pengguna tentang lagu tersebut dan tawarkan apakah ingin melanjutkan pembahasan topik yang tadi dibicarakan atau memutar lagu lain.\n"
+    AddTool("self.search_music",
+        "CARI & PERIKSA INFORMASI LAGU YOUTUBE (Search YouTube Song Info & Duration):\n"
+        "Gunakan tool ini untuk memeriksa ketersediaan lagu di YouTube, mengambil judul resmi video dan durasinya.\n"
+        "PANDUAN ALUR (SANGAT PENTING):\n"
+        "1. Panggil tool ini terlebih dahulu untuk mendapatkan judul dan info lagu dari YouTube.\n"
+        "2. SETELAH MENDAPATKAN INFO LAGU, KAMU WAJIB MENANYAKAN KONFIRMASI KEPADA PENGGUNA TERLEBIH DAHULU!\n"
+        "   Contoh: 'Saya menemukan lagu \"[Judul Lagu]\" di YouTube (durasi [Durasi]). Apakah kamu ingin saya memutarnya sekarang?'\n"
+        "3. JANGAN LANGSUNG MEMUTAR LAGU sebelum pengguna memberikan konfirmasi persetujuan (seperti 'ya', 'yes', 'putar', 'lanjut', 'oke', 'iya')!\n"
+        "4. Hanya setelah pengguna mengonfirmasi (menjawab Ya/Putar), kamu baru memanggil tool `self.play_music`.\n"
         "Args:\n"
-        "  `query`: Judul lagu atau video ID yang telah dikonfirmasi oleh pengguna (misal: 'alan walker faded', '60ItHLz5WEA', 'tulus teh hijau').",
+        "  `query`: Judul lagu, nama artis/penyanyi, atau kata kunci pencarian YouTube.",
         PropertyList({Property("query", kPropertyTypeString)}),
         [](const PropertyList& properties) -> ReturnValue {
             auto query = properties["query"].value<std::string>();
-            YouTubeAudioPoller::GetInstance().PlayQuery(query);
-            return "Baik, lagu '" + query + "' sedang dicari dan segera diputar dari YouTube.";
+            std::string video_id, title, duration;
+            bool found = YouTubeAudioPoller::GetInstance().SearchSong(query, video_id, title, duration);
+            if (!found) {
+                return "Lagu dengan pencarian '" + query + "' tidak ditemukan di YouTube. Silakan tanyakan kepada pengguna apakah ingin mencari judul lain.";
+            }
+            std::string res = "Lagu ditemukan di YouTube!\n- Judul: " + title + "\n- Video ID: " + video_id;
+            if (!duration.empty()) {
+                res += "\n- Durasi: " + duration;
+            }
+            res += "\n\nINSTRUKSI WAJIB: JANGAN langsung memutar lagu ini! Sekarang tanyakan konfirmasi kepada pengguna: sebutkan judul lagunya (\"" + title + "\")" + (duration.empty() ? "" : " dan durasi (" + duration + ")") + ", lalu tanyakan apakah pengguna ingin memutarnya. Tunggu jawaban pengguna. Jika pengguna menjawab 'ya'/'putar'/'lanjut', panggil tool self.play_music.";
+            return res;
+        });
+
+    AddTool("self.play_music",
+        "PUTAR LAGU YOUTUBE SETELAH DIKONFIRMASI (Play Confirmed YouTube Song):\n"
+        "Panggil tool ini HANYA SETELAH pengguna mengonfirmasi (menjawab 'ya', 'putar', 'lanjut', 'yes', 'oke', 'mainkan') setelah sebelumnya kamu menanyakan konfirmasi lagu.\n"
+        "JANGAN memanggil tool ini pada permintaan pertama sebelum pengguna mengonfirmasi persetujuan.\n"
+        "Tool ini akan langsung memulai pemutaran audio lagu ke speaker perangkat.\n"
+        "Args:\n"
+        "  `query`: (Opsional) Judul lagu atau video_id yang dikonfirmasi. Jika kosong, akan memutar lagu yang baru saja dicek.",
+        PropertyList({Property("query", kPropertyTypeString, std::string(""))}),
+        [](const PropertyList& properties) -> ReturnValue {
+            auto& yt = YouTubeAudioPoller::GetInstance();
+            auto query = properties["query"].value<std::string>();
+            std::string q_lower = query;
+            std::transform(q_lower.begin(), q_lower.end(), q_lower.begin(), ::tolower);
+            if (q_lower == "ya" || q_lower == "yes" || q_lower == "putar" ||
+                q_lower == "ok" || q_lower == "oke" || q_lower == "lanjut" ||
+                q_lower == "iya" || q_lower == "mainkan" || q_lower == "play" ||
+                q_lower == "true" || q_lower == "1") {
+                query = "";
+            }
+
+            // Jika belum ada lagu yang diperiksa / pending konfirmasi:
+            if (!yt.HasPendingSong()) {
+                if (!query.empty()) {
+                    std::string video_id, title, duration;
+                    bool found = yt.SearchSong(query, video_id, title, duration);
+                    if (found) {
+                        return "PERINGATAN: JANGAN langsung memutar lagu ini! Kamu belum menanyakan konfirmasi kepada pengguna. Lagu ditemukan: \"" + title + "\"" + (duration.empty() ? "" : " (durasi " + duration + ")") + ". Sekarang tanyakan kepada pengguna: 'Saya menemukan lagu " + title + ". Apakah kamu ingin saya memutarnya sekarang?' dan TUNGGU konfirmasi persetujuan pengguna (seperti 'ya'/'putar'/'lanjut') sebelum memanggil self.play_music lagi.";
+                    } else {
+                        return "Lagu '" + query + "' tidak ditemukan di YouTube. Silakan tanyakan kepada pengguna apakah ingin mencari judul lain.";
+                    }
+                }
+                return "Belum ada lagu yang diperiksa. Silakan gunakan self.check_music terlebih dahulu untuk mencari lagu dan meminta konfirmasi persetujuan pengguna.";
+            }
+
+            if (!query.empty()) {
+                yt.PlaySong("", query);
+            } else {
+                yt.PlaySong("", "");
+            }
+            return "Baik, lagu sedang diputar sekarang.";
         });
 
     AddTool("self.stop_music",
         "HENTIKAN / STOP PEMUTARAN MUSIK (Stop Music):\n"
-        "Gunakan tool ini ketika pengguna meminta: 'stop lagu', 'hentikan lagu', 'matikan musik', 'berhenti memutar lagu', 'stop musik', atau 'hentikan pemutaran musik' (baik yang diputar dari YouTube maupun dari kartu memori SD).",
+        "Gunakan tool ini ketika pengguna meminta: 'stop lagu', 'hentikan lagu', 'matikan musik', 'berhenti memutar lagu', 'stop musik', atau 'hentikan pemutaran musik'.",
         PropertyList(),
         [&board](const PropertyList& properties) -> ReturnValue {
             YouTubeAudioPoller::GetInstance().Abort();
@@ -555,11 +605,7 @@ void McpServer::AddCommonTools() {
                 return "Gagal: Kartu MicroSD belum terpasang atau tidak terbaca di perangkat. Harap pastikan kartu memori sudah terpasang.";
             }
 
-            bool ok = YouTubeAudioPoller::GetInstance().DownloadSong(query, title);
-            if (!ok) {
-                return "Proses download lain sedang berlangsung di layar. Harap tunggu hingga selesai.";
-            }
-            return "Baik, saya sedang mengunduh lagu '" + title + "' langsung ke folder musik '/sdcard/music/' di kartu memori. Anda dapat melihat animasi proses unduhannya dari 0% sampai 100% langsung di layar perangkat.";
+            return "Fitur unduh YouTube offline telah dinonaktifkan untuk menjaga kestabilan memori. Silakan gunakan pemutaran langsung YouTube online dengan meminta: 'putar lagu " + title + "'.";
         });
 
     AddTool("self.sdcard.list_music",

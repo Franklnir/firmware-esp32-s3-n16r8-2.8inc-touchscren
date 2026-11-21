@@ -39,6 +39,7 @@ public:
     virtual void ShowNotification(const std::string& notification, int duration_ms = 3000);
     virtual void SetEmotion(const char* emotion);
     virtual void SetChatMessage(const char* role, const char* content);
+    virtual void RemoveChatMessage(const char* role, const char* content) {}
     virtual void ClearChatMessages();
     virtual void SetTheme(Theme* theme);
     virtual Theme* GetTheme() { return current_theme_; }
@@ -49,7 +50,8 @@ public:
     virtual void ClearTextGlyphs() {}
     virtual void SetEmojiCollection(std::shared_ptr<EmojiCollection>) {}
     virtual void SetupUI() { setup_ui_called_ = true; }
-    virtual void StartMusicVisualizer(const char* title = nullptr) {}
+    virtual void StartMusicVisualizer(const char* title = nullptr, int total_sec = 0) {}
+    virtual void SetMusicProgress(int current_sec, int total_sec) { UpdateMusicProgress(current_sec, total_sec); }
     virtual void StopMusicVisualizer() {}
     virtual void UpdateMusicProgress(int current_sec, int total_sec) {}
     virtual bool IsMusicVisualizerActive() const { return false; }

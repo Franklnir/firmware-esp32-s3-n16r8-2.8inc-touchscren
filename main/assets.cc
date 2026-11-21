@@ -333,15 +333,15 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
                 }
             }
         }
-        if (light_theme != nullptr) {
-            light_theme->set_emoji_collection(custom_emoji_collection);
-        }
-        if (dark_theme != nullptr) {
-            dark_theme->set_emoji_collection(custom_emoji_collection);
+        for (auto& pair : theme_manager.GetAllThemes()) {
+            if (pair.second != nullptr) {
+                pair.second->set_emoji_collection(custom_emoji_collection);
+            }
         }
         Board::GetInstance().GetDisplay()->SetEmojiCollection(custom_emoji_collection);
     }
 
+    std::shared_ptr<LvglCBinImage> shared_bg_image = nullptr;
     cJSON* skin = cJSON_GetObjectItem(root, "skin");
     if (cJSON_IsObject(skin)) {
         cJSON* light_skin = cJSON_GetObjectItem(skin, "light");
@@ -364,8 +364,8 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
                              background_image->valuestring);
                     return false;
                 }
-                auto background_image = std::make_shared<LvglCBinImage>(ptr);
-                light_theme->set_background_image(background_image);
+                shared_bg_image = std::make_shared<LvglCBinImage>(ptr);
+                light_theme->set_background_image(shared_bg_image);
             }
         }
         cJSON* dark_skin = cJSON_GetObjectItem(skin, "dark");
@@ -388,8 +388,16 @@ bool Assets::LvglStrategy::Apply(Assets* assets, bool refresh_display_theme) {
                              background_image->valuestring);
                     return false;
                 }
-                auto background_image = std::make_shared<LvglCBinImage>(ptr);
-                dark_theme->set_background_image(background_image);
+                shared_bg_image = std::make_shared<LvglCBinImage>(ptr);
+                dark_theme->set_background_image(shared_bg_image);
+            }
+        }
+        // Propagate background image to all registered themes that don't have one
+        if (shared_bg_image != nullptr) {
+            for (auto& pair : theme_manager.GetAllThemes()) {
+                if (pair.second != nullptr && pair.second->background_image() == nullptr) {
+                    pair.second->set_background_image(shared_bg_image);
+                }
             }
         }
     }

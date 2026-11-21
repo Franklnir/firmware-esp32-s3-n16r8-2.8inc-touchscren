@@ -22,6 +22,7 @@ protected:
     lv_obj_t* status_bar_ = nullptr;
     lv_obj_t* content_ = nullptr;
     lv_obj_t* container_ = nullptr;
+    lv_obj_t* bg_image_ = nullptr;
     lv_obj_t* side_bar_ = nullptr;
     lv_obj_t* bottom_bar_ = nullptr;
     lv_obj_t* xiaozhi_bottom_nav_ = nullptr;
@@ -186,6 +187,7 @@ public:
     virtual void SetStatus(const char* status) override;
     virtual void SetEmotion(const char* emotion) override;
     virtual void SetChatMessage(const char* role, const char* content) override;
+    virtual void RemoveChatMessage(const char* role, const char* content) override;
     virtual void ClearChatMessages() override;
     virtual void SetPreviewImage(std::unique_ptr<LvglImage> image) override;
     virtual void UpdateStatusBar(bool update_all = false) override;
@@ -199,6 +201,7 @@ public:
     // Add theme switching function
     virtual void SetTheme(Theme* theme) override;
     virtual void SetBrightness(uint8_t brightness) override;
+    virtual void SetEmojiCollection(std::shared_ptr<EmojiCollection> collection) override;
 
     void ShowWifiConfigModal();
     void HideWifiConfigModal();
@@ -212,8 +215,9 @@ public:
     void SetHideSubtitle(bool hide);
 
     // DJ Music Visualizer
-    virtual void StartMusicVisualizer(const char* title = nullptr) override;
+    virtual void StartMusicVisualizer(const char* title = nullptr, int total_sec = 0) override;
     virtual void StopMusicVisualizer() override;
+    virtual void SetMusicProgress(int current_sec, int total_sec) override { UpdateMusicProgress(current_sec, total_sec); }
     virtual void UpdateMusicProgress(int current_sec, int total_sec) override;
     virtual bool IsMusicVisualizerActive() const override { return music_visualizer_active_; }
     void AnimateMusicVisualizer();

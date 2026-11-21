@@ -690,7 +690,12 @@ void LcdDisplay::SetupUI_Theme2() {
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_row(container_, 0, 0);
-    lv_obj_set_style_bg_color(container_, xz_bg, 0);
+    if (lvgl_theme->background_image() != nullptr) {
+        lv_obj_set_style_bg_image_src(container_, lvgl_theme->background_image()->image_dsc(), 0);
+    } else {
+        lv_obj_set_style_bg_image_src(container_, nullptr, 0);
+        lv_obj_set_style_bg_color(container_, xz_bg, 0);
+    }
     lv_obj_set_style_border_color(container_, xz_border, 0);
     lv_obj_remove_flag(container_, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -1283,17 +1288,32 @@ void LcdDisplay::SetupUI_Theme1() {
     lv_obj_set_style_text_color(screen, lvgl_theme->text_color(), 0);
     lv_obj_set_style_bg_color(screen, xz_bg, 0);
 
-    /* Clean Solid Dynamic Background Container */
+    /* Clean Solid Dynamic Background Container - Fits exactly between header (top_bar_) and bottom
+     * nav */
     container_ = lv_obj_create(screen);
-    lv_obj_set_size(container_, LV_HOR_RES, LV_VER_RES);
+    lv_obj_set_size(container_, width_, height_ - 60);
     lv_obj_set_style_radius(container_, 0, 0);
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(container_, xz_bg, 0);
-    lv_obj_align(container_, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, 30);
     lv_obj_remove_flag(container_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(container_, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Background image widget scaled with LV_IMAGE_ALIGN_COVER to completely eliminate top/bottom gaps */
+    bg_image_ = lv_image_create(container_);
+    lv_obj_set_size(bg_image_, width_, height_ - 60);
+    lv_obj_align(bg_image_, LV_ALIGN_CENTER, 0, 0);
+    lv_image_set_inner_align(bg_image_, LV_IMAGE_ALIGN_COVER);
+    lv_obj_remove_flag(bg_image_, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(bg_image_, LV_OBJ_FLAG_SCROLLABLE);
+    if (lvgl_theme->background_image() != nullptr) {
+        lv_image_set_src(bg_image_, lvgl_theme->background_image()->image_dsc());
+        lv_obj_remove_flag(bg_image_, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(bg_image_, LV_OBJ_FLAG_HIDDEN);
+    }
 
     /* Bottom layer: emoji_box_ - centered display container */
     emoji_box_ = lv_obj_create(screen);
@@ -1322,7 +1342,7 @@ void LcdDisplay::SetupUI_Theme1() {
 
     /* Layer 1: Top bar - for status icons (matches Nova OS C_BG & C_BORDER) */
     top_bar_ = lv_obj_create(screen);
-    lv_obj_set_size(top_bar_, lv_pct(100), LV_SIZE_CONTENT);
+    lv_obj_set_size(top_bar_, width_, 30);
     lv_obj_set_style_radius(top_bar_, 0, 0);
     lv_obj_set_style_bg_opa(top_bar_, LV_OPA_COVER, 0);
     lv_obj_set_style_bg_color(top_bar_, xz_bg, 0);
@@ -2600,7 +2620,8 @@ void LcdDisplay::UpdateHeaderColorOverlayUI() {
 
 void LcdDisplay::SetHeaderIconColor(uint32_t color_hex) {
     DisplayLockGuard lock(this);
-    if (header_icon_color_ == color_hex) return;
+    if (header_icon_color_ == color_hex)
+        return;
     header_icon_color_ = color_hex;
     Settings disp_set("display", true);
     disp_set.SetInt("hdr_icon_clr", (int)color_hex);
@@ -3185,6 +3206,18 @@ void LcdDisplay::UpdateResolution() {
         lv_obj_set_width(xiaozhi_bottom_nav_, width_);
         lv_obj_align(xiaozhi_bottom_nav_, LV_ALIGN_BOTTOM_MID, 0, 0);
     }
+    if (top_bar_ != nullptr && ui_theme_id_ != 2) {
+        lv_obj_set_size(top_bar_, width_, 30);
+    }
+    if (container_ != nullptr && ui_theme_id_ != 2) {
+        lv_obj_set_size(container_, width_, height_ - 60);
+        lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, 30);
+    }
+    if (bg_image_ != nullptr && ui_theme_id_ != 2) {
+        lv_obj_set_size(bg_image_, width_, height_ - 60);
+        lv_obj_align(bg_image_, LV_ALIGN_CENTER, 0, 0);
+        lv_image_set_inner_align(bg_image_, LV_IMAGE_ALIGN_COVER);
+    }
 }
 
 void LcdDisplay::SetupUI() {
@@ -3206,6 +3239,61 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
         SetChatMessage_Theme2(role, content);
     } else {
         SetChatMessage_Theme1(role, content);
+    }
+}
+
+void LcdDisplay::RemoveChatMessage(const char* role, const char* content) {
+    DisplayLockGuard lock(this);
+    if (content == nullptr) {
+        return;
+    }
+
+    if (ui_theme_id_ == 2 && content_ != nullptr && role != nullptr) {
+        uint32_t cnt = lv_obj_get_child_cnt(content_);
+        for (int32_t i = (int32_t)cnt - 1; i >= 0; --i) {
+            auto container = lv_obj_get_child(content_, i);
+            if (!container || !lv_obj_is_valid(container)) {
+                continue;
+            }
+            auto bubble = container;
+            auto bubble_role = static_cast<const char*>(lv_obj_get_user_data(bubble));
+            if (bubble_role == nullptr && lv_obj_get_child_cnt(bubble) > 0) {
+                bubble = lv_obj_get_child(bubble, 0);
+                if (bubble && lv_obj_is_valid(bubble)) {
+                    bubble_role = static_cast<const char*>(lv_obj_get_user_data(bubble));
+                }
+            }
+            if (bubble_role == nullptr || strcmp(bubble_role, role) != 0 ||
+                lv_obj_get_child_cnt(bubble) == 0) {
+                continue;
+            }
+            auto label = lv_obj_get_child(bubble, 0);
+            if (!label || !lv_obj_is_valid(label) || !lv_obj_check_type(label, &lv_label_class)) {
+                continue;
+            }
+            const char* label_text = lv_label_get_text(label);
+            if (label_text == nullptr || strcmp(label_text, content) != 0) {
+                continue;
+            }
+            if (chat_message_label_ == label) {
+                chat_message_label_ = nullptr;
+            }
+            lv_obj_del(container);
+            return;
+        }
+    }
+
+    if (chat_message_label_ != nullptr && lv_obj_is_valid(chat_message_label_)) {
+        if (lv_obj_check_type(chat_message_label_, &lv_label_class)) {
+            const char* cur = lv_label_get_text(chat_message_label_);
+            if (cur != nullptr && strcmp(cur, content) == 0) {
+                lv_anim_delete(chat_message_label_, nullptr);
+                lv_label_set_text(chat_message_label_, "");
+                if (bottom_bar_ != nullptr && lv_obj_is_valid(bottom_bar_)) {
+                    lv_obj_add_flag(bottom_bar_, LV_OBJ_FLAG_HIDDEN);
+                }
+            }
+        }
     }
 }
 
@@ -3305,6 +3393,7 @@ void LcdDisplay::DestroyUI() {
     recent_apps_modal_ = nullptr;
     side_bar_ = nullptr;
     container_ = nullptr;
+    bg_image_ = nullptr;
     top_bar_ = nullptr;
     rot_icon_label_ = nullptr;
     content_ = nullptr;
@@ -4656,10 +4745,32 @@ void LcdDisplay::SetEmotion(const char* emotion) {
     }
 }
 
+void LcdDisplay::SetEmojiCollection(std::shared_ptr<EmojiCollection> collection) {
+    DisplayLockGuard lock(this);
+    auto& tm = LvglThemeManager::GetInstance();
+    for (auto& pair : tm.GetAllThemes()) {
+        if (pair.second != nullptr) {
+            pair.second->set_emoji_collection(collection);
+        }
+    }
+    if (current_theme_ != nullptr) {
+        static_cast<LvglTheme*>(current_theme_)->set_emoji_collection(collection);
+    }
+    if (ui_theme_id_ == 1 && setup_ui_called_) {
+        SetEmotion("neutral");
+    }
+}
+
 void LcdDisplay::SetTheme(Theme* theme) {
     DisplayLockGuard lock(this);
 
     auto lvgl_theme = static_cast<LvglTheme*>(theme);
+    current_theme_ = lvgl_theme;
+
+    if (!setup_ui_called_) {
+        Display::SetTheme(lvgl_theme);
+        return;
+    }
 
     // Get the screen belonging to container_
     lv_obj_t* screen = (container_ != nullptr) ? lv_obj_get_screen(container_) : lv_screen_active();
@@ -4670,13 +4781,19 @@ void LcdDisplay::SetTheme(Theme* theme) {
     auto large_icon_font = lvgl_theme->large_icon_font()->font();
 
     if (text_font->line_height >= 40) {
-        lv_obj_set_style_text_font(mute_label_, large_icon_font, 0);
-        lv_obj_set_style_text_font(battery_label_, large_icon_font, 0);
-        lv_obj_set_style_text_font(network_label_, large_icon_font, 0);
+        if (mute_label_ != nullptr)
+            lv_obj_set_style_text_font(mute_label_, large_icon_font, 0);
+        if (battery_label_ != nullptr)
+            lv_obj_set_style_text_font(battery_label_, large_icon_font, 0);
+        if (network_label_ != nullptr)
+            lv_obj_set_style_text_font(network_label_, large_icon_font, 0);
     } else {
-        lv_obj_set_style_text_font(mute_label_, icon_font, 0);
-        lv_obj_set_style_text_font(battery_label_, icon_font, 0);
-        lv_obj_set_style_text_font(network_label_, icon_font, 0);
+        if (mute_label_ != nullptr)
+            lv_obj_set_style_text_font(mute_label_, icon_font, 0);
+        if (battery_label_ != nullptr)
+            lv_obj_set_style_text_font(battery_label_, icon_font, 0);
+        if (network_label_ != nullptr)
+            lv_obj_set_style_text_font(network_label_, icon_font, 0);
     }
 
     const auto* synced = GetCurrentSyncedTheme();
@@ -4696,15 +4813,34 @@ void LcdDisplay::SetTheme(Theme* theme) {
     lv_color_t xz_muted = lv_color_hex(eff_muted);
 
     // Set parent text color and background
-    lv_obj_set_style_text_font(screen, text_font, 0);
-    lv_obj_set_style_text_color(screen, xz_text, 0);
-    lv_obj_set_style_bg_color(screen, xz_bg, 0);
+    if (screen != nullptr) {
+        lv_obj_set_style_text_font(screen, text_font, 0);
+        lv_obj_set_style_text_color(screen, xz_text, 0);
+        lv_obj_set_style_bg_color(screen, xz_bg, 0);
+    }
 
     // Set background image or solid color
     if (container_ != nullptr) {
-        if (lvgl_theme->background_image() != nullptr) {
+        if (ui_theme_id_ != 2) {
+            lv_obj_set_size(container_, width_, height_ - 60);
+            lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, 30);
+        }
+        if (bg_image_ != nullptr) {
+            if (ui_theme_id_ != 2) {
+                lv_obj_set_size(bg_image_, width_, height_ - 60);
+                lv_obj_align(bg_image_, LV_ALIGN_CENTER, 0, 0);
+            }
+            if (lvgl_theme->background_image() != nullptr) {
+                lv_image_set_src(bg_image_, lvgl_theme->background_image()->image_dsc());
+                lv_image_set_inner_align(bg_image_, LV_IMAGE_ALIGN_COVER);
+                lv_obj_remove_flag(bg_image_, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(bg_image_, LV_OBJ_FLAG_HIDDEN);
+            }
+        } else if (lvgl_theme->background_image() != nullptr) {
             lv_obj_set_style_bg_image_src(container_, lvgl_theme->background_image()->image_dsc(),
                                           0);
+            lv_obj_set_style_bg_image_opa(container_, LV_OPA_COVER, 0);
         } else {
             lv_obj_set_style_bg_image_src(container_, nullptr, 0);
             lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
@@ -4730,15 +4866,21 @@ void LcdDisplay::SetTheme(Theme* theme) {
     }
 
     // Update status bar elements
-    lv_obj_set_style_text_color(network_label_, icon_clr, 0);
-    lv_obj_set_style_text_color(status_label_, xz_text, 0);
-    lv_obj_set_style_text_color(notification_label_, xz_text, 0);
-    lv_obj_set_style_text_color(mute_label_, icon_clr, 0);
-    lv_obj_set_style_text_color(battery_label_, icon_clr, 0);
+    if (network_label_ != nullptr)
+        lv_obj_set_style_text_color(network_label_, icon_clr, 0);
+    if (status_label_ != nullptr)
+        lv_obj_set_style_text_color(status_label_, xz_text, 0);
+    if (notification_label_ != nullptr)
+        lv_obj_set_style_text_color(notification_label_, xz_text, 0);
+    if (mute_label_ != nullptr)
+        lv_obj_set_style_text_color(mute_label_, icon_clr, 0);
+    if (battery_label_ != nullptr)
+        lv_obj_set_style_text_color(battery_label_, icon_clr, 0);
     if (battery_pct_label_ != nullptr) {
         lv_obj_set_style_text_color(battery_pct_label_, icon_clr, 0);
     }
-    lv_obj_set_style_text_color(emoji_label_, xz_text, 0);
+    if (emoji_label_ != nullptr)
+        lv_obj_set_style_text_color(emoji_label_, xz_text, 0);
 
     if (ui_theme_id_ == 2) {
         // Theme 2: WeChat Chat Bubble UI - dynamically adapt content background & existing bubbles
@@ -4843,7 +4985,9 @@ void LcdDisplay::SetTheme(Theme* theme) {
     CreateBottomNav();
 
     // Update low battery popup
-    lv_obj_set_style_bg_color(low_battery_popup_, lvgl_theme->low_battery_color(), 0);
+    if (low_battery_popup_ != nullptr) {
+        lv_obj_set_style_bg_color(low_battery_popup_, lvgl_theme->low_battery_color(), 0);
+    }
 
     // No errors occurred. Save theme to settings
     Display::SetTheme(lvgl_theme);
@@ -5104,7 +5248,7 @@ void LcdDisplay::AnimateMusicVisualizer() {
     }
 }
 
-void LcdDisplay::StartMusicVisualizer(const char* title) {
+void LcdDisplay::StartMusicVisualizer(const char* title, int total_sec) {
     DisplayLockGuard lock(this);
     if (!setup_ui_called_)
         return;
@@ -5154,7 +5298,18 @@ void LcdDisplay::StartMusicVisualizer(const char* title) {
         lv_label_set_text(music_title_label_, title);
     }
     if (music_duration_label_ != nullptr) {
-        lv_label_set_text(music_duration_label_, "00:00 / --:--");
+        if (total_sec > 0) {
+            char buf[40];
+            if (total_sec >= 3600) {
+                snprintf(buf, sizeof(buf), "00:00:00 / %02d:%02d:%02d", total_sec / 3600,
+                         (total_sec % 3600) / 60, total_sec % 60);
+            } else {
+                snprintf(buf, sizeof(buf), "00:00 / %02d:%02d", total_sec / 60, total_sec % 60);
+            }
+            lv_label_set_text(music_duration_label_, buf);
+        } else {
+            lv_label_set_text(music_duration_label_, "00:00 / --:--");
+        }
     }
 
     // Start animation timer if not already created

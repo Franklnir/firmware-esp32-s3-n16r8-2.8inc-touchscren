@@ -1936,8 +1936,8 @@ private:
         cb.is_online_playing = []() {
             return YouTubeAudioPoller::GetInstance().IsPlaying();
         };
-        cb.download_online = [](const std::string& q, const std::string& t) {
-            return YouTubeAudioPoller::GetInstance().DownloadSong(q, t);
+        cb.download_online = [](const std::string& q, const std::string& t) -> bool {
+            return false;
         };
         cb.trigger_click = [this]() {
             TriggerHapticClick();

@@ -98,6 +98,7 @@ public:
 
     void RegisterTheme(const std::string& theme_name, LvglTheme* theme);
     LvglTheme* GetTheme(const std::string& theme_name);
+    inline const std::map<std::string, LvglTheme*>& GetAllThemes() const { return themes_; }
 
 private:
     LvglThemeManager();
