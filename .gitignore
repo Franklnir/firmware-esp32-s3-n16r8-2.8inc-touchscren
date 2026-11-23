@@ -22,3 +22,4 @@ mmap_generate_*.h
 *.log
 test.txt
 .commandcode/
+.migration-backups/

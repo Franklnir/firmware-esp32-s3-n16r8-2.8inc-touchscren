@@ -87,6 +87,11 @@ std::string YouTubeAudioPoller::GetServerDomain() {
     }
 #endif
 
+    // Fallback default domain so YouTube streaming works out-of-the-box
+    if (found_domain.empty()) {
+        found_domain = "xiaozhiscig.biz.id";
+    }
+
     if (!found_domain.empty()) {
         std::lock_guard<std::mutex> lock(s_domain_mutex);
         s_cached_server_domain = found_domain;
