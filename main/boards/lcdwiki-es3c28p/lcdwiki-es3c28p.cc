@@ -1526,6 +1526,11 @@ private:
             if (chronchi_display_) {
                 chronchi_display_->updateBtStatus(connected);
             }
+            if (nova_display_) {
+                lvgl_port_lock(0);
+                nova_display_->OnBleConnectionChanged(connected);
+                lvgl_port_unlock();
+            }
         });
 
         chronchi_ble_->setNotificationCallback([this](const ChronchiNotification& notif) {
@@ -2431,7 +2436,7 @@ private:
         lv_indev_set_read_cb(indev, TouchpadRead);
         lv_indev_set_user_data(indev, this);
         lv_indev_set_disp(indev, lv_display_get_default());
-        lv_indev_set_scroll_limit(indev, 16);
+        lv_indev_set_scroll_limit(indev, 8);
         lv_timer_t* indev_timer = lv_indev_get_read_timer(indev);
         if (indev_timer) {
             lv_timer_set_period(indev_timer, 15);

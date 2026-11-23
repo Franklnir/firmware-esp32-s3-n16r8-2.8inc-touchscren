@@ -5,6 +5,7 @@
 #include "system_info.h"
 
 #include <esp_log.h>
+#include <esp_task_wdt.h>
 #include <arpa/inet.h>
 #include <cJSON.h>
 #include <cstring>
@@ -103,6 +104,11 @@ bool WebsocketProtocol::OpenAudioChannel() {
             }
         }
     }
+    if (url.empty()) {
+        ESP_LOGE(TAG, "WebSocket server domain is not configured! Please configure server domain in Wi-Fi portal.");
+        SetError(Lang::Strings::SERVER_NOT_FOUND);
+        return false;
+    }
     std::string token = settings.GetString("token");
     int version = settings.GetInt("version");
     if (version != 0) {
@@ -127,7 +133,16 @@ bool WebsocketProtocol::OpenAudioChannel() {
     }
     websocket_->SetHeader("Protocol-Version", std::to_string(version_).c_str());
     websocket_->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
+    websocket_->SetHeader("X-Device-Mac", SystemInfo::GetMacAddress().c_str());
+    websocket_->SetHeader("X-Chip-Type", "esp32-s3");
+    websocket_->SetHeader("X-Device-Chip", "esp32-s3");
     websocket_->SetHeader("Client-Id", Board::GetInstance().GetUuid().c_str());
+
+    Settings sys_settings("system", false);
+    std::string voice_lang = sys_settings.GetString("voice_lang", "en-US");
+    if (!voice_lang.empty()) {
+        websocket_->SetHeader("Accept-Language", voice_lang.c_str());
+    }
 
     websocket_->OnData([this](const char* data, size_t len, bool binary) {
         if (binary) {
@@ -192,7 +207,7 @@ bool WebsocketProtocol::OpenAudioChannel() {
     ESP_LOGI(TAG, "Connecting to websocket server: %s with version: %d", url.c_str(), version_);
     if (!websocket_->Connect(url.c_str())) {
         ESP_LOGE(TAG, "Failed to connect to websocket server, code=%d", websocket_->GetLastError());
-        SetError(Lang::Strings::SERVER_NOT_CONNECTED, url);
+        SetError(Lang::Strings::SERVER_NOT_CONNECTED);
         return false;
     }
 
@@ -202,10 +217,20 @@ bool WebsocketProtocol::OpenAudioChannel() {
         return false;
     }
 
-    // Wait for server hello
-    EventBits_t bits =
-        xEventGroupWaitBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE,
-                            pdFALSE, pdMS_TO_TICKS(10000));
+    // Wait for server hello with watchdog feeding so TWDT never triggers a reboot
+    EventBits_t bits = 0;
+    int waited_ms = 0;
+    while (waited_ms < 10000) {
+        bits = xEventGroupWaitBits(event_group_handle_, WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT, pdTRUE,
+                                   pdFALSE, pdMS_TO_TICKS(100));
+        if (bits & WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT) {
+            break;
+        }
+        waited_ms += 100;
+#if CONFIG_ESP_TASK_WDT_INIT
+        esp_task_wdt_reset();
+#endif
+    }
     if (!(bits & WEBSOCKET_PROTOCOL_SERVER_HELLO_EVENT)) {
         ESP_LOGE(TAG, "Failed to receive server hello");
         SetError(Lang::Strings::SERVER_TIMEOUT);
@@ -224,8 +249,21 @@ std::string WebsocketProtocol::GetHelloMessage() {
     cJSON* root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "type", "hello");
     cJSON_AddNumberToObject(root, "version", version_);
-    AddClientCapabilities(root);
+    cJSON* features = cJSON_CreateObject();
+#if CONFIG_USE_SERVER_AEC
+    cJSON_AddBoolToObject(features, "aec", true);
+#endif
+    cJSON_AddBoolToObject(features, "mcp", true);
+    cJSON_AddItemToObject(root, "features", features);
+    AddTextFontCapabilities(root);
     cJSON_AddStringToObject(root, "transport", "websocket");
+
+    Settings sys_settings("system", false);
+    std::string voice_lang = sys_settings.GetString("voice_lang", "en-US");
+    if (!voice_lang.empty()) {
+        cJSON_AddStringToObject(root, "language", voice_lang.c_str());
+    }
+
     cJSON* audio_params = cJSON_CreateObject();
     cJSON_AddStringToObject(audio_params, "format", "opus");
     cJSON_AddNumberToObject(audio_params, "sample_rate", 16000);
@@ -241,11 +279,7 @@ std::string WebsocketProtocol::GetHelloMessage() {
 
 void WebsocketProtocol::ParseServerHello(const cJSON* root) {
     auto transport = cJSON_GetObjectItem(root, "transport");
-    if (!cJSON_IsString(transport)) {
-        ESP_LOGE(TAG, "Missing or non-string transport in server hello");
-        return;
-    }
-    if (strcmp(transport->valuestring, "websocket") != 0) {
+    if (transport == nullptr || strcmp(transport->valuestring, "websocket") != 0) {
         ESP_LOGE(TAG, "Unsupported transport: %s", transport->valuestring);
         return;
     }

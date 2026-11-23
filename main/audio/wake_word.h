@@ -21,7 +21,6 @@ public:
     virtual void EncodeWakeWordData() = 0;
     virtual bool GetWakeWordOpus(std::vector<uint8_t>& opus) = 0;
     virtual const std::string& GetLastDetectedWakeWord() const = 0;
-    virtual std::vector<std::string> GetWakeWords() const = 0;
 };
 
 #endif

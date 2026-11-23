@@ -312,6 +312,9 @@ public:
     void ShowNotifCenterModal();
     void ShowWeatherModal();
     void ShowPhoneModal();
+    void CloseBluetoothModal();
+    void OnBleConnectionChanged(bool connected);
+    void UpdateBluetoothModal(bool ble_conn);
 
     void UpdateNavData(const std::string& dist, const std::string& dir, const std::string& title,
                        const std::string& dur, const std::string& eta, const std::string& spd, bool active,
@@ -394,6 +397,12 @@ private:
     lv_obj_t* top_battery_icon_ = nullptr;
     lv_obj_t* top_battery_label_ = nullptr;
     lv_obj_t* bt_modal_ = nullptr;
+    lv_obj_t* bt_qr_box_ = nullptr;
+    lv_obj_t* bt_success_box_ = nullptr;
+    lv_obj_t* bt_status_lbl_ = nullptr;
+    lv_obj_t* bt_inst_lbl_ = nullptr;
+    lv_obj_t* bt_h_icon_ = nullptr;
+    bool bt_was_connected_ = false;
     uint32_t header_icon_color_ = 0xFFFFFF;
     uint8_t bat_style_ = BAT_STYLE_ICON_PERCENT;
     uint8_t icon_color_mode_ = ICON_COLOR_MIXED;
@@ -417,6 +426,7 @@ private:
                                 int x, int y, int width, int height,
                                 const lv_font_t* font, lv_color_t color);
     void StyleButton(lv_obj_t* button, lv_color_t fill, lv_color_t border, int radius = 12);
+    void StyleKeyboard(lv_obj_t* kb);
     lv_obj_t* MakeButton(lv_obj_t* parent, const char* text,
                          int x, int y, int width, int height,
                          lv_color_t fill, lv_color_t border, lv_color_t text_color,

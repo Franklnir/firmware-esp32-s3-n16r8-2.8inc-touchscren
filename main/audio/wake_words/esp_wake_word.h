@@ -28,7 +28,6 @@ public:
     void EncodeWakeWordData();
     bool GetWakeWordOpus(std::vector<uint8_t>& opus);
     const std::string& GetLastDetectedWakeWord() const { return last_detected_wake_word_; }
-    std::vector<std::string> GetWakeWords() const override;
 
 private:
     esp_wn_iface_t *wakenet_iface_ = nullptr;

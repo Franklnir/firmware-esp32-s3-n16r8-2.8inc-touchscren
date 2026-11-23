@@ -16,7 +16,14 @@ set(SOURCES "audio/audio_codec.cc"
             "led/gpio_led.cc"
             "display/display.cc"
             "display/text_glyph.cc"
-            "display/lcd_display.cc"
+            "display/lcd/lcd_display_core.cc"
+            "display/lcd/lcd_display_chat.cc"
+            "display/lcd/lcd_display_controls.cc"
+            "display/lcd/lcd_display_conversation.cc"
+            "display/lcd/lcd_display_dashboard.cc"
+            "display/lcd/lcd_display_wifi.cc"
+            "display/lcd/lcd_display_rendering.cc"
+            "display/lcd/lcd_display_music.cc"
             "display/oled_display.cc"
             "display/lvgl_display/lvgl_display.cc"
             "display/emote_display.cc"
@@ -889,6 +896,7 @@ endif()
 file(GLOB BOARD_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/boards/${BOARD_DIR}/nova/*.cc
 )
 list(APPEND SOURCES ${BOARD_SOURCES})
 
@@ -910,7 +918,11 @@ endif ()
 # Chronchi mode sources
 if(CONFIG_BOARD_TYPE_ESP32S3_CAM_ST7789 OR CONFIG_BOARD_TYPE_LCDWIKI_ES3C28P)
     list(APPEND SOURCES
-        "chronchi/chronchi_display.cpp"
+        "chronchi/display/chronchi_display_core.cpp"
+        "chronchi/display/chronchi_display_navigation.cpp"
+        "chronchi/display/chronchi_display_screens.cpp"
+        "chronchi/display/chronchi_display_theme.cpp"
+        "chronchi/display/chronchi_display_updates.cpp"
         "chronchi/chronchi_alert.cpp"
     )
     if(CONFIG_BT_ENABLED)

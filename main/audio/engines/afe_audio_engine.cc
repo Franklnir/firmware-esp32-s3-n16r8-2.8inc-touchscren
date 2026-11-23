@@ -325,10 +325,6 @@ bool AfeAudioEngine::HasWakeWord() const {
     return wake_detector_ != WakeDetector::kNone;
 }
 
-std::vector<std::string> AfeAudioEngine::GetWakeWords() const {
-    return custom_wake_word_ ? custom_wake_word_->GetWakeWords() : wake_words_;
-}
-
 bool AfeAudioEngine::IsWakeWordDetectionEnabled() const {
     return event_group_ != nullptr && (xEventGroupGetBits(event_group_) & kWakeWordEnabled) != 0;
 }

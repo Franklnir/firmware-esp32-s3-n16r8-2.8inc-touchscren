@@ -1,5 +1,8 @@
 #include "esp_wake_word.h"
+#include "assets.h"
+#include "settings.h"
 #include <esp_log.h>
+#include <cctype>
 
 
 #define TAG "EspWakeWord"
@@ -20,8 +23,18 @@ bool EspWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) {
     codec_ = codec;
 
     if (models_list == nullptr) {
-        wakenet_model_ = esp_srmodel_init("model");
-        owns_models_ = wakenet_model_ != nullptr;
+        auto& assets = Assets::GetInstance();
+        if (assets.models_list() != nullptr) {
+            wakenet_model_ = assets.models_list();
+        } else {
+            assets.LoadSrmodels();
+            if (assets.models_list() != nullptr) {
+                wakenet_model_ = assets.models_list();
+            } else {
+                wakenet_model_ = esp_srmodel_init("model");
+                owns_models_ = wakenet_model_ != nullptr;
+            }
+        }
     } else {
         wakenet_model_ = models_list;
     }
@@ -34,7 +47,24 @@ bool EspWakeWord::Initialize(AudioCodec* codec, srmodel_list_t* models_list) {
         ESP_LOGE(TAG, "No model found");
         return false;
     }
-    char *model_name = esp_srmodel_filter(wakenet_model_, ESP_WN_PREFIX, nullptr);
+    Settings settings("audio", true);
+    std::string wake_word = settings.GetString("wake_word", "alexa");
+    std::string kw;
+    for (char c : wake_word) {
+        if (c != ' ' && c != '_' && c != '-') {
+            kw.push_back(std::tolower(static_cast<unsigned char>(c)));
+        }
+    }
+    if (kw == "shopia") kw = "sophia";
+    if (kw == "hiandiy") kw = "hiandy";
+
+    char *model_name = nullptr;
+    if (!kw.empty()) {
+        model_name = esp_srmodel_filter(wakenet_model_, ESP_WN_PREFIX, kw.c_str());
+    }
+    if (model_name == nullptr) {
+        model_name = esp_srmodel_filter(wakenet_model_, ESP_WN_PREFIX, nullptr);
+    }
     if (model_name == nullptr) {
         ESP_LOGE(TAG, "No WakeNet model found");
         return false;
@@ -113,21 +143,6 @@ size_t EspWakeWord::GetFeedSize() {
         return 0;
     }
     return wakenet_iface_->get_samp_chunksize(wakenet_data_);
-}
-
-std::vector<std::string> EspWakeWord::GetWakeWords() const {
-    std::vector<std::string> words;
-    if (wakenet_data_ == nullptr || wakenet_iface_ == nullptr) {
-        return words;
-    }
-    const int count = wakenet_iface_->get_word_num(wakenet_data_);
-    for (int i = 1; i <= count; ++i) {
-        const char* word = wakenet_iface_->get_word_name(wakenet_data_, i);
-        if (word != nullptr && word[0] != '\0') {
-            words.emplace_back(word);
-        }
-    }
-    return words;
 }
 
 void EspWakeWord::EncodeWakeWordData() {
