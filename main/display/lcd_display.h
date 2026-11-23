@@ -36,6 +36,7 @@ protected:
     lv_obj_t* emoji_label_ = nullptr;
     lv_obj_t* emoji_image_ = nullptr;
     std::unique_ptr<LvglGif> gif_controller_ = nullptr;
+    bool emotion_uses_image_ = false;
     lv_obj_t* emoji_box_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
     esp_timer_handle_t preview_timer_ = nullptr;
@@ -174,6 +175,7 @@ protected:
     void UpdateHeaderColorOverlayUI();
 
     void InitializeLcdThemes();
+    void ShowEmotion();
     virtual bool Lock(int timeout_ms = 0) override;
     virtual void Unlock() override;
 
@@ -185,7 +187,7 @@ protected:
 public:
     ~LcdDisplay();
     virtual void SetStatus(const char* status) override;
-    virtual void SetEmotion(const char* emotion) override;
+    virtual bool SetEmotion(const char* emotion) override;
     virtual void SetChatMessage(const char* role, const char* content) override;
     virtual void RemoveChatMessage(const char* role, const char* content) override;
     virtual void ClearChatMessages() override;
@@ -195,8 +197,8 @@ public:
     void SetZoom(bool zoomed);
     void SetZoomLevel(int level);
     int GetZoomLevel() const { return zoom_level_; }
-    int ZoomIn();
-    int ZoomOut();
+    int ZoomIn() override;
+    int ZoomOut() override;
     virtual void SetupUI() override;
     // Add theme switching function
     virtual void SetTheme(Theme* theme) override;
@@ -212,7 +214,7 @@ public:
     virtual bool IsSt7789() const override { return is_st7789_; }
 
     // Set whether to hide chat messages/subtitles
-    void SetHideSubtitle(bool hide);
+    virtual void SetHideSubtitle(bool hide) override;
 
     // DJ Music Visualizer
     virtual void StartMusicVisualizer(const char* title = nullptr, int total_sec = 0) override;

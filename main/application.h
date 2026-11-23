@@ -37,7 +37,8 @@
 #define MAIN_EVENT_STOP_LISTENING       (1 << 11)
 #define MAIN_EVENT_STATE_CHANGED        (1 << 12)
 #define MAIN_EVENT_PLAYBACK_DRAINED     (1 << 13)
-
+#define MAIN_EVENT_STARTUP_HINT_TIMEOUT (1 << 14)
+#define MAIN_EVENT_PROTOCOL_PENDING (1 << 15)
 
 enum AecMode {
     kAecOff,
@@ -82,6 +83,7 @@ public:
      * Schedule a callback to be executed in the main task
      */
     void Schedule(std::function<void()>&& callback);
+    void NotifyProtocolPending() { xEventGroupSetBits(event_group_, MAIN_EVENT_PROTOCOL_PENDING); }
 
     /**
      * Alert with status, message, emotion and optional sound
@@ -143,10 +145,12 @@ private:
     std::unique_ptr<Protocol> protocol_;
     EventGroupHandle_t event_group_ = nullptr;
     esp_timer_handle_t clock_timer_handle_ = nullptr;
+    esp_timer_handle_t startup_wake_word_hint_timer_ = nullptr;
     DeviceStateMachine state_machine_;
     ListeningMode listening_mode_ = kListeningModeAutoStop;
     AecMode aec_mode_ = kAecOff;
     std::string last_error_message_;
+    std::string startup_wake_word_hint_message_;
     AudioService audio_service_;
     NotifyPlayer notify_player_;
     uint32_t notification_playback_id_ = 0;
@@ -155,6 +159,8 @@ private:
     std::function<void(const std::string&)> mcp_broadcast_callback_;
 
     bool has_server_time_ = false;
+    bool startup_completed_ = false;
+    bool pending_startup_wake_word_hint_ = false;
     bool aborted_ = false;
     bool assets_version_checked_ = false;
     bool play_popup_on_listening_ = false;  // Flag to play popup sound after state changes to listening

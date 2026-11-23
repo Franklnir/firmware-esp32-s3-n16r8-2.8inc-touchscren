@@ -65,6 +65,31 @@ Make sure `clang-format` is available before you use it:
 - Includes are sorted automatically.
 - Access specifiers are indented by -4 spaces.
 
+## C++ Runtime and Error Handling
+
+- Project-owned C++ code targets GNU C++23. Do not require newer language features in `main/`.
+- C++ exceptions and RTTI are disabled. Do not use `throw`, `try`/`catch`, `dynamic_cast`, or
+  `typeid`.
+- Use RAII for owned resources, including ESP-IDF handles and C APIs with explicit cleanup
+  functions. Raw pointers are non-owning unless an interface documents otherwise.
+- Return `std::expected<T, E>` for recoverable failures that need an error value. Prefer a small
+  enum or `esp_err_t` in hot paths, and translate errors to strings at protocol or UI boundaries.
+- Check an `expected` before dereferencing it. Do not call `value()` on an unchecked result because
+  a bad access terminates the firmware when exceptions are disabled.
+- Treat violated programmer invariants as fatal with an assertion or explicit abort; do not model
+  them as recoverable runtime errors.
+- Realtime audio paths use bounded queues and avoid repeated allocation. Use fixed-capacity storage
+  when the maximum is known; add a pool only after profiling shows churn or fragmentation.
+- Project-owned `main` sources enforce a 1536-byte function stack-frame limit at compilation.
+  Variable-length arrays and `alloca` are rejected. GCC also writes `.su` stack-usage reports beside
+  object files under `build/esp-idf/main/CMakeFiles/`.
+- Build protocol messages by appending to an owned string. Avoid long `operator+` chains that keep
+  several temporary strings alive in one expression. Moving an expression across source lines
+  does not reduce its memory use.
+- A function-frame limit does not bound the complete task call chain or heap allocations. Verify
+  task stack high-water marks and free internal heap on hardware; do not increase task stacks or
+  disable the frame limit to accommodate large local workspaces.
+
 ### Notes
 
 1. Make sure the code has been formatted before committing.

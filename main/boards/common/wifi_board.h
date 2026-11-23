@@ -60,6 +60,10 @@ public:
      * Enter WiFi configuration mode (thread-safe, can be called from any task)
      */
     void EnterWifiConfigMode();
+    bool RequestWifiConfigMode() override {
+        EnterWifiConfigMode();
+        return true;
+    }
     
     /**
      * Check if in WiFi config mode

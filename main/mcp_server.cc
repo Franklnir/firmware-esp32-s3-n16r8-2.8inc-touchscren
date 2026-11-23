@@ -712,11 +712,12 @@ void McpServer::AddCommonTools() {
                     // Lower priority only during camera hardware capture
                     TaskPriorityReset priority_reset(1);
                     if (!camera->Capture()) {
-                        throw std::runtime_error("Failed to capture photo");
+                        return std::string("Failed to capture photo");
                     }
                 }
                 auto question = properties["question"].value<std::string>();
-                return camera->Explain(question);
+                auto result = camera->Explain(question);
+                return result ? ReturnValue(std::move(*result)) : ReturnValue(result.error());
             });
 
         AddTool("self.camera.start_streaming",
@@ -732,9 +733,8 @@ void McpServer::AddCommonTools() {
                 }
                 if (camera->StartStreaming()) {
                     return std::string("Camera streaming started. You can now see the camera feed on the display.");
-                } else {
-                    throw std::runtime_error("Failed to start camera streaming");
                 }
+                return std::string("Failed to start camera streaming");
             });
 
         AddTool("self.camera.stop_streaming",
@@ -795,7 +795,7 @@ void McpServer::AddCommonTools() {
                 if (!camera->IsStreaming()) {
                     return std::string("Zoom hanya bisa digunakan saat live streaming aktif. Silakan mulai streaming kamera terlebih dahulu.");
                 }
-                auto display = dynamic_cast<LcdDisplay*>(Board::GetInstance().GetDisplay());
+                auto display = Board::GetInstance().GetDisplay();
                 if (display) {
                     int level = display->ZoomIn();
                     return "Kamera di-zoom in ke " + std::to_string(level) + "x (maksimal 10x).";
@@ -814,7 +814,7 @@ void McpServer::AddCommonTools() {
                 if (!camera->IsStreaming()) {
                     return std::string("Zoom hanya bisa digunakan saat live streaming aktif. Silakan mulai streaming kamera terlebih dahulu.");
                 }
-                auto display = dynamic_cast<LcdDisplay*>(Board::GetInstance().GetDisplay());
+                auto display = Board::GetInstance().GetDisplay();
                 if (display) {
                     int level = display->ZoomOut();
                     return "Kamera di-zoom out ke " + std::to_string(level) + "x (minimal 1x).";
@@ -848,9 +848,7 @@ void McpServer::AddCommonTools() {
         PropertyList(),
         [](const PropertyList& properties) -> ReturnValue {
             auto& board = Board::GetInstance();
-            auto wifi_board = dynamic_cast<WifiBoard*>(&board);
-            if (wifi_board != nullptr) {
-                wifi_board->EnterWifiConfigMode();
+            if (board.RequestWifiConfigMode()) {
                 return std::string("Memasuki mode konfigurasi Wi-Fi...");
             }
             return std::string("Gagal: Papan tidak mendukung mode konfigurasi Wi-Fi.");
@@ -1037,19 +1035,15 @@ void McpServer::AddUserOnlyTools() {
 
     // Display control
 #ifdef HAVE_LVGL
-    auto display = dynamic_cast<LvglDisplay*>(Board::GetInstance().GetDisplay());
-    if (display) {
+    auto display = Board::GetInstance().GetDisplay();
+    if (display != nullptr && display->SupportsGuiOperations()) {
         AddUserOnlyTool("self.screen.get_info", "Information about the screen, including width, height, etc.",
             PropertyList(),
             [display](const PropertyList& properties) -> ReturnValue {
                 cJSON *json = cJSON_CreateObject();
                 cJSON_AddNumberToObject(json, "width", display->width());
                 cJSON_AddNumberToObject(json, "height", display->height());
-                if (dynamic_cast<OledDisplay*>(display)) {
-                    cJSON_AddBoolToObject(json, "monochrome", true);
-                } else {
-                    cJSON_AddBoolToObject(json, "monochrome", false);
-                }
+                cJSON_AddBoolToObject(json, "monochrome", display->IsMonochrome());
                 return json;
             });
 
@@ -1065,7 +1059,7 @@ void McpServer::AddUserOnlyTools() {
 
                 std::string jpeg_data;
                 if (!display->SnapshotToJpeg(jpeg_data, quality)) {
-                    throw std::runtime_error("Failed to snapshot screen");
+                    return std::string("Failed to snapshot screen");
                 }
 
                 ESP_LOGI(TAG, "Upload snapshot %u bytes to %s", jpeg_data.size(), url.c_str());
@@ -1076,7 +1070,7 @@ void McpServer::AddUserOnlyTools() {
                 auto http = Board::GetInstance().GetNetwork()->CreateHttp(3);
                 http->SetHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
                 if (!http->Open("POST", url)) {
-                    throw std::runtime_error("Failed to open URL: " + url);
+                    return std::string("Failed to open URL: ") + url;
                 }
                 {
                     // 文件字段头部
@@ -1099,8 +1093,10 @@ void McpServer::AddUserOnlyTools() {
                 }
                 http->Write("", 0);
 
-                if (http->GetStatusCode() != 200) {
-                    throw std::runtime_error("Unexpected status code: " + std::to_string(http->GetStatusCode()));
+                int status = http->GetStatusCode().value_or(0);
+                if (status != 200) {
+                    http->Close();
+                    return std::string("Unexpected status code: ") + std::to_string(status);
                 }
                 std::string result = http->ReadAll();
                 http->Close();
@@ -1117,24 +1113,27 @@ void McpServer::AddUserOnlyTools() {
                 auto http = Board::GetInstance().GetNetwork()->CreateHttp(3);
 
                 if (!http->Open("GET", url)) {
-                    throw std::runtime_error("Failed to open URL: " + url);
+                    return std::string("Failed to open URL: ") + url;
                 }
-                int status_code = http->GetStatusCode();
+                int status_code = http->GetStatusCode().value_or(0);
                 if (status_code != 200) {
-                    throw std::runtime_error("Unexpected status code: " + std::to_string(status_code));
+                    http->Close();
+                    return std::string("Unexpected status code: ") + std::to_string(status_code);
                 }
 
                 size_t content_length = http->GetBodyLength();
                 char* data = (char*)heap_caps_malloc(content_length, MALLOC_CAP_8BIT);
                 if (data == nullptr) {
-                    throw std::runtime_error("Failed to allocate memory for image: " + url);
+                    http->Close();
+                    return std::string("Failed to allocate memory for image: ") + url;
                 }
                 size_t total_read = 0;
                 while (total_read < content_length) {
-                    int ret = http->Read(data + total_read, content_length - total_read);
+                    int ret = http->Read(data + total_read, content_length - total_read).value_or(-1);
                     if (ret < 0) {
                         heap_caps_free(data);
-                        throw std::runtime_error("Failed to download image: " + url);
+                        http->Close();
+                        return std::string("Failed to download image: ") + url;
                     }
                     if (ret == 0) {
                         break;
@@ -1388,43 +1387,29 @@ void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* to
     }
 
     PropertyList arguments = (*tool_iter)->properties();
-    try {
-        for (auto& argument : arguments) {
-            bool found = false;
-            if (cJSON_IsObject(tool_arguments)) {
-                auto value = cJSON_GetObjectItem(tool_arguments, argument.name().c_str());
-                if (argument.type() == kPropertyTypeBoolean && cJSON_IsBool(value)) {
-                    argument.set_value<bool>(value->valueint == 1);
-                    found = true;
-                } else if (argument.type() == kPropertyTypeInteger && cJSON_IsNumber(value)) {
-                    argument.set_value<int>(value->valueint);
-                    found = true;
-                } else if (argument.type() == kPropertyTypeString && cJSON_IsString(value)) {
-                    argument.set_value<std::string>(value->valuestring);
-                    found = true;
-                }
-            }
-
-            if (!argument.has_default_value() && !found) {
-                ESP_LOGE(TAG, "tools/call: Missing valid argument: %s", argument.name().c_str());
-                ReplyError(id, "Missing valid argument: " + argument.name());
-                return;
+    for (auto& argument : arguments) {
+        bool found = false;
+        if (cJSON_IsObject(tool_arguments)) {
+            auto value = cJSON_GetObjectItem(tool_arguments, argument.name().c_str());
+            if (argument.type() == kPropertyTypeBoolean && cJSON_IsBool(value)) {
+                found = argument.set_value<bool>(value->valueint == 1);
+            } else if (argument.type() == kPropertyTypeInteger && cJSON_IsNumber(value)) {
+                found = argument.set_value<int>(value->valueint);
+            } else if (argument.type() == kPropertyTypeString && cJSON_IsString(value)) {
+                found = argument.set_value<std::string>(value->valuestring);
             }
         }
-    } catch (const std::exception& e) {
-        ESP_LOGE(TAG, "tools/call: %s", e.what());
-        ReplyError(id, e.what());
-        return;
+
+        if (!argument.has_default_value() && !found) {
+            ESP_LOGE(TAG, "tools/call: Missing or invalid argument: %s", argument.name().c_str());
+            ReplyError(id, "Missing or invalid argument: " + argument.name());
+            return;
+        }
     }
 
     // Use main thread to call the tool
     auto& app = Application::GetInstance();
     app.Schedule([this, id, tool_iter, arguments = std::move(arguments)]() {
-        try {
-            ReplyResult(id, (*tool_iter)->Call(arguments));
-        } catch (const std::exception& e) {
-            ESP_LOGE(TAG, "tools/call: %s", e.what());
-            ReplyError(id, e.what());
-        }
+        ReplyResult(id, (*tool_iter)->Call(arguments));
     });
 }

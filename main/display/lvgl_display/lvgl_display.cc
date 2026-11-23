@@ -96,7 +96,7 @@ bool LvglDisplay::AddTextGlyphs(const std::vector<TextGlyph>& glyphs, uint8_t bp
     }
 
     DisplayLockGuard lock(this);
-    auto theme = dynamic_cast<LvglTheme*>(current_theme_);
+    auto theme = static_cast<LvglTheme*>(current_theme_);
     if (theme == nullptr || theme->text_font() == nullptr) {
         return false;
     }
@@ -351,7 +351,7 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         int bat_style = prefs.GetInt("bat_style", 1); // 0: icon only, 1: icon + %, 2: % only
 
         bool is_light_bg = false;
-        auto theme = dynamic_cast<LvglTheme*>(current_theme_);
+        auto theme = static_cast<LvglTheme*>(current_theme_);
         if (theme != nullptr) {
             uint32_t rgb = lv_color_to_int(theme->background_color());
             uint8_t r = (rgb >> 16) & 0xFF;

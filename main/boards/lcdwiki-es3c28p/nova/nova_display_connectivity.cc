@@ -46,7 +46,7 @@ void NovaDisplay::StartWifiScan() {
                         if (http) {
                             http->SetTimeout(4000);
                             if (http->Open("GET", "http://192.168.4.1/scan")) {
-                                if (http->GetStatusCode() == 200) {
+                                if (http->GetStatusCode().value_or(0) == 200) {
                                     std::string body = http->ReadAll();
                                     cJSON* root = cJSON_Parse(body.c_str());
                                     if (root) {

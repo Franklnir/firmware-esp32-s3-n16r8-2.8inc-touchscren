@@ -1,24 +1,25 @@
 #include "sdkconfig.h"
 
+#include <esp_heap_caps.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <unistd.h>
-#include <errno.h>
-#include <esp_heap_caps.h>
 #include <cstdio>
 #include <cstring>
 
 #include "esp_imgfx_color_convert.h"
 #include "esp_video_device.h"
 #include "esp_video_init.h"
+#include "esp_video_ioctl.h"
 #include "linux/videodev2.h"
 
 #include "board.h"
 #include "display.h"
-#include "esp_video.h"
 #include "esp_jpeg_common.h"
+#include "esp_video.h"
 #include "jpg/image_to_jpeg.h"
 #include "jpg/jpeg_to_image.h"
 #include "lvgl_display.h"
@@ -28,8 +29,8 @@
 #ifdef CONFIG_XIAOZHI_ENABLE_CAMERA_DEBUG_MODE
 #undef LOG_LOCAL_LEVEL
 #define LOG_LOCAL_LEVEL MAX(CONFIG_LOG_DEFAULT_LEVEL, ESP_LOG_DEBUG)
-#endif  // CONFIG_XIAOZHI_ENABLE_CAMERA_DEBUG_MODE
-#include <esp_log.h> // should be after LOCAL_LOG_LEVEL definition
+#endif                // CONFIG_XIAOZHI_ENABLE_CAMERA_DEBUG_MODE
+#include <esp_log.h>  // should be after LOCAL_LOG_LEVEL definition
 
 #ifdef CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
 #ifdef CONFIG_IDF_TARGET_ESP32P4
@@ -53,7 +54,6 @@
 #endif  // target
 #endif  // CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
 
-
 #define TAG "EspVideo"
 
 #if CONFIG_XIAOZHI_CAMERA_MIRROR_CONFIGURED
@@ -69,8 +69,10 @@ static constexpr bool kConfiguredVFlip = false;
 #endif
 #endif
 
-#if defined(CONFIG_CAMERA_SENSOR_SWAP_PIXEL_BYTE_ORDER) || defined(CONFIG_XIAOZHI_ENABLE_CAMERA_ENDIANNESS_SWAP)
-#pragma message("CAMERA_SENSOR_SWAP_PIXEL_BYTE_ORDER or CONFIG_XIAOZHI_ENABLE_CAMERA_ENDIANNESS_SWAP is enabled; verify YUV422 image integrity")
+#if defined(CONFIG_CAMERA_SENSOR_SWAP_PIXEL_BYTE_ORDER) || \
+    defined(CONFIG_XIAOZHI_ENABLE_CAMERA_ENDIANNESS_SWAP)
+#pragma message( \
+    "CAMERA_SENSOR_SWAP_PIXEL_BYTE_ORDER or CONFIG_XIAOZHI_ENABLE_CAMERA_ENDIANNESS_SWAP is enabled; verify YUV422 image integrity")
 #endif
 
 #if CONFIG_XIAOZHI_ENABLE_CAMERA_DEBUG_MODE
@@ -88,9 +90,7 @@ static constexpr bool kConfiguredVFlip = false;
 #define MAP_FAILED nullptr
 #endif
 
-__attribute__((weak)) esp_err_t esp_video_deinit(void) {
-    return ESP_ERR_NOT_SUPPORTED;
-}
+__attribute__((weak)) esp_err_t esp_video_deinit(void) { return ESP_ERR_NOT_SUPPORTED; }
 // end of for compatibility with old esp_video version
 
 static void log_available_video_devices() {
@@ -108,7 +108,8 @@ static void log_available_video_devices() {
 #define CAM_PRINT_FOURCC(pixelformat) (void)0;
 #endif  // CONFIG_XIAOZHI_ENABLE_CAMERA_DEBUG_MODE
 
-EspVideo::EspVideo(const esp_video_init_config_t& config) {
+EspVideo::EspVideo(const esp_video_init_config_t& config,
+                   SensorOrientationCallback orientation_callback) {
     if (esp_video_init(&config) != ESP_OK) {
         ESP_LOGE(TAG, "esp_video_init failed");
         return;
@@ -171,10 +172,10 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
         return;
     }
 
-    ESP_LOGD(
-        TAG,
-        "VIDIOC_QUERYCAP: driver=%s, card=%s, bus_info=%s, version=0x%08lx, capabilities=0x%08lx, device_caps=0x%08lx",
-        cap.driver, cap.card, cap.bus_info, cap.version, cap.capabilities, cap.device_caps);
+    ESP_LOGD(TAG,
+             "VIDIOC_QUERYCAP: driver=%s, card=%s, bus_info=%s, version=0x%08lx, "
+             "capabilities=0x%08lx, device_caps=0x%08lx",
+             cap.driver, cap.card, cap.bus_info, cap.version, cap.capabilities, cap.device_caps);
 
     struct v4l2_format format = {};
     format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -184,8 +185,8 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
         video_fd_ = -1;
         return;
     }
-    ESP_LOGD(TAG, "VIDIOC_G_FMT: pixelformat=0x%08lx, width=%ld, height=%ld", format.fmt.pix.pixelformat,
-             format.fmt.pix.width, format.fmt.pix.height);
+    ESP_LOGD(TAG, "VIDIOC_G_FMT: pixelformat=0x%08lx, width=%ld, height=%ld",
+             format.fmt.pix.pixelformat, format.fmt.pix.width, format.fmt.pix.height);
     CAM_PRINT_FOURCC(format.fmt.pix.pixelformat);
 
     struct v4l2_format setformat = {};
@@ -254,7 +255,8 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
     };
 #endif
     while (ioctl(video_fd_, VIDIOC_ENUM_FMT, &fmtdesc) == 0) {
-        ESP_LOGD(TAG, "VIDIOC_ENUM_FMT: pixelformat=0x%08lx, description=%s", fmtdesc.pixelformat, fmtdesc.description);
+        ESP_LOGD(TAG, "VIDIOC_ENUM_FMT: pixelformat=0x%08lx, description=%s", fmtdesc.pixelformat,
+                 fmtdesc.description);
         CAM_PRINT_FOURCC(fmtdesc.pixelformat);
         int rank = get_rank(fmtdesc.pixelformat);
         if (rank < best_rank) {
@@ -286,10 +288,7 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
         return;
     }
 
-#if CONFIG_XIAOZHI_CAMERA_MIRROR_CONFIGURED
-    SetHMirror(kConfiguredHMirror);
-    SetVFlip(kConfiguredVFlip);
-#endif
+    ConfigureOrientation(orientation_callback);
 
 #ifdef CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
     frame_.width = setformat.fmt.pix.height;
@@ -324,7 +323,8 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
             sensor_format_ = 0;
             return;
         }
-        void* start = mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, video_fd_, buf.m.offset);
+        void* start =
+            mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, video_fd_, buf.m.offset);
         if (start == MAP_FAILED) {
             ESP_LOGE(TAG, "mmap failed");
             close(video_fd_);
@@ -387,6 +387,38 @@ EspVideo::EspVideo(const esp_video_init_config_t& config) {
 #endif  // CONFIG_ESP_VIDEO_ENABLE_ISP_VIDEO_DEVICE
 }
 
+void EspVideo::ConfigureOrientation(SensorOrientationCallback callback) {
+#if CONFIG_XIAOZHI_CAMERA_MIRROR_CONFIGURED
+    SetHMirror(kConfiguredHMirror);
+    SetVFlip(kConfiguredVFlip);
+    return;
+#endif
+
+    if (callback == nullptr) {
+        return;
+    }
+
+    esp_cam_sensor_id_t sensor_id = {};
+    struct v4l2_ext_control ctrl = {};
+    ctrl.id = ESP_CAM_SENSOR_IOC_G_CHIP_ID;
+    ctrl.size = sizeof(sensor_id);
+    ctrl.p_u8 = reinterpret_cast<uint8_t*>(&sensor_id);
+    struct v4l2_ext_controls ctrls = {};
+    ctrls.ctrl_class = V4L2_CTRL_CLASS_ESP_CAM_IOCTL;
+    ctrls.count = 1;
+    ctrls.controls = &ctrl;
+    if (ioctl(video_fd_, VIDIOC_G_EXT_CTRLS, &ctrls) != 0) {
+        ESP_LOGW(TAG, "Cannot read sensor ID; keeping sensor-native orientation");
+        return;
+    }
+
+    auto orientation = callback(sensor_id.pid);
+    if (orientation) {
+        SetHMirror(orientation->hmirror);
+        SetVFlip(orientation->vflip);
+    }
+}
+
 EspVideo::~EspVideo() {
     if (streaming_on_ && video_fd_ >= 0) {
         int type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -416,8 +448,8 @@ bool EspVideo::Capture() {
     }
 
     if (!streaming_on_ || video_fd_ < 0) {
-        ESP_LOGE(TAG, "Capture failed: camera did not initialize (streaming_on_=%d, video_fd_=%d)", streaming_on_,
-                 video_fd_);
+        ESP_LOGE(TAG, "Capture failed: camera did not initialize (streaming_on_=%d, video_fd_=%d)",
+                 streaming_on_, video_fd_);
         return false;
     }
 
@@ -437,7 +469,8 @@ bool EspVideo::Capture() {
                 frame_.format = 0;
             }
             frame_.len = buf.bytesused;
-            frame_.data = (uint8_t*)heap_caps_malloc(frame_.len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            frame_.data =
+                (uint8_t*)heap_caps_malloc(frame_.len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (!frame_.data) {
                 ESP_LOGE(TAG, "alloc frame copy failed: need allocate %lu bytes", buf.bytesused);
                 if (ioctl(video_fd_, VIDIOC_QBUF, &buf) != 0) {
@@ -447,14 +480,16 @@ bool EspVideo::Capture() {
             }
 
 #ifdef CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
-            ESP_LOGW(TAG, "mmap_buffers_[buf.index].length = %d, sensor_width = %d, sensor_height = %d",
+            ESP_LOGW(TAG,
+                     "mmap_buffers_[buf.index].length = %d, sensor_width = %d, sensor_height = %d",
                      mmap_buffers_[buf.index].length, sensor_width_, sensor_height_);
 #else
-            ESP_LOGW(TAG, "mmap_buffers_[buf.index].length = %d, frame.width = %d, frame.height = %d",
+            ESP_LOGW(TAG,
+                     "mmap_buffers_[buf.index].length = %d, frame.width = %d, frame.height = %d",
                      mmap_buffers_[buf.index].length, frame_.width, frame_.height);
 #endif  // CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
-            ESP_LOG_BUFFER_HEXDUMP(TAG, mmap_buffers_[buf.index].start, MIN(mmap_buffers_[buf.index].length, 256),
-                                   ESP_LOG_DEBUG);
+            ESP_LOG_BUFFER_HEXDUMP(TAG, mmap_buffers_[buf.index].start,
+                                   MIN(mmap_buffers_[buf.index].length, 256), ESP_LOG_DEBUG);
 
             switch (sensor_format_) {
                 case V4L2_PIX_FMT_RGB565:
@@ -501,7 +536,8 @@ bool EspVideo::Capture() {
                 }
                 case V4L2_PIX_FMT_RGB565X: {
                     // 大端序的 RGB565 需要转换为小端序
-                    // 目前 esp_video 的大小端都会返回格式为 RGB565，不会返回格式为 RGB565X，此 case 用于未来版本兼容
+                    // 目前 esp_video 的大小端都会返回格式为 RGB565，不会返回格式为 RGB565X，此 case
+                    // 用于未来版本兼容
                     auto src16 = (uint16_t*)mmap_buffers_[buf.index].start;
                     auto dst16 = (uint16_t*)frame_.data;
                     size_t pixel_count = (size_t)frame_.width * (size_t)frame_.height;
@@ -521,8 +557,8 @@ bool EspVideo::Capture() {
 
 #ifdef CONFIG_XIAOZHI_ENABLE_ROTATE_CAMERA_IMAGE
 #ifndef CONFIG_SOC_PPA_SUPPORTED
-            uint8_t* rotate_dst =
-                (uint8_t*)heap_caps_aligned_alloc(64, frame_.len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            uint8_t* rotate_dst = (uint8_t*)heap_caps_aligned_alloc(
+                64, frame_.len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (rotate_dst == nullptr) {
                 ESP_LOGE(TAG, "Failed to allocate memory for rotate image");
                 if (ioctl(video_fd_, VIDIOC_QBUF, &buf) != 0) {
@@ -582,7 +618,8 @@ bool EspVideo::Capture() {
                 .data_len = frame_.len,
             };
 
-            imgfx_err = esp_imgfx_rotate_process(rotate_handle, &rotate_input_data, &rotate_output_data);
+            imgfx_err =
+                esp_imgfx_rotate_process(rotate_handle, &rotate_input_data, &rotate_output_data);
             if (imgfx_err != ESP_IMGFX_ERR_OK) {
                 ESP_LOGE(TAG, "esp_imgfx_rotate_process failed");
                 heap_caps_free(rotate_dst);
@@ -617,7 +654,9 @@ bool EspVideo::Capture() {
                     break;
                 case V4L2_PIX_FMT_YUYV:
                 case V4L2_PIX_FMT_UYVY: {
-                    ESP_LOGW(TAG, "YUV422 format is not supported for PPA rotation, using software conversion to RGB888");
+                    ESP_LOGW(TAG,
+                             "YUV422 format is not supported for PPA rotation, using software "
+                             "conversion to RGB888");
                     rotate_src = (uint8_t*)heap_caps_malloc(frame_.width * frame_.height * 3,
                                                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                     if (rotate_src == nullptr) {
@@ -634,7 +673,8 @@ bool EspVideo::Capture() {
                         .out_pixel_fmt = ESP_IMGFX_PIXEL_FMT_RGB888,
                     };
                     esp_imgfx_color_convert_handle_t convert_handle = nullptr;
-                    esp_imgfx_err_t err = esp_imgfx_color_convert_open(&convert_cfg, &convert_handle);
+                    esp_imgfx_err_t err =
+                        esp_imgfx_color_convert_open(&convert_cfg, &convert_handle);
                     if (err != ESP_IMGFX_ERR_OK || convert_handle == nullptr) {
                         ESP_LOGE(TAG, "esp_imgfx_color_convert_open failed");
                         heap_caps_free(rotate_src);
@@ -652,7 +692,8 @@ bool EspVideo::Capture() {
                         .data = rotate_src,
                         .data_len = static_cast<uint32_t>(frame_.width * frame_.height * 3),
                     };
-                    err = esp_imgfx_color_convert_process(convert_handle, &convert_input_data, &convert_output_data);
+                    err = esp_imgfx_color_convert_process(convert_handle, &convert_input_data,
+                                                          &convert_output_data);
                     if (err != ESP_IMGFX_ERR_OK) {
                         ESP_LOGE(TAG, "esp_imgfx_color_convert_process failed");
                         heap_caps_free(rotate_src);
@@ -673,7 +714,8 @@ bool EspVideo::Capture() {
                     break;
                 }
                 default:
-                    ESP_LOGE(TAG, "unsupported sensor format for PPA rotation: 0x%08lx", sensor_format_);
+                    ESP_LOGE(TAG, "unsupported sensor format for PPA rotation: 0x%08lx",
+                             sensor_format_);
                     if (ioctl(video_fd_, VIDIOC_QBUF, &buf) != 0) {
                         ESP_LOGE(TAG, "Cleanup: VIDIOC_QBUF failed");
                     }
@@ -681,7 +723,8 @@ bool EspVideo::Capture() {
             }
 
             uint8_t* rotate_dst = (uint8_t*)heap_caps_malloc(
-                frame_.width * frame_.height * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT | MALLOC_CAP_CACHE_ALIGNED);
+                frame_.width * frame_.height * 2,
+                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT | MALLOC_CAP_CACHE_ALIGNED);
             if (rotate_dst == nullptr) {
                 ESP_LOGE(TAG, "Failed to allocate memory for rotate image");
                 if (ioctl(video_fd_, VIDIOC_QBUF, &buf) != 0) {
@@ -762,7 +805,7 @@ bool EspVideo::Capture() {
     }
 
     // 显示预览图片
-    auto display = dynamic_cast<LvglDisplay*>(Board::GetInstance().GetDisplay());
+    auto display = Board::GetInstance().GetDisplay();
     if (display != nullptr) {
         if (!frame_.data) {
             ESP_LOGE(TAG, "frame.data is null");
@@ -810,7 +853,8 @@ bool EspVideo::Capture() {
                     .data = data,
                     .data_len = static_cast<uint32_t>(w * h * 2),
                 };
-                err = esp_imgfx_color_convert_process(convert_handle, &convert_input_data, &convert_output_data);
+                err = esp_imgfx_color_convert_process(convert_handle, &convert_input_data,
+                                                      &convert_output_data);
                 if (err != ESP_IMGFX_ERR_OK) {
                     ESP_LOGE(TAG, "esp_imgfx_color_convert_process failed");
                     heap_caps_free(data);
@@ -843,10 +887,16 @@ bool EspVideo::Capture() {
                 size_t out_height = 0;
                 size_t out_stride = 0;
 
-                esp_err_t ret =
-                    jpeg_to_image(frame_.data, frame_.len, &out_data, &out_len, &out_width, &out_height, &out_stride);
+                // Decode only as large as the screen: a full-size HD frame needs a ~1.8 MB
+                // buffer, which fails while the previous preview is still held. The AI
+                // still receives the original frame_ in Explain().
+                esp_err_t ret = jpeg_to_image_fit(frame_.data, frame_.len,
+                                                  static_cast<size_t>(display->width()),
+                                                  static_cast<size_t>(display->height()), &out_data,
+                                                  &out_len, &out_width, &out_height, &out_stride);
                 if (ret != ESP_OK) {
-                    ESP_LOGE(TAG, "Failed to decode JPEG image: %d (%s)", (int)ret, esp_err_to_name(ret));
+                    ESP_LOGE(TAG, "Failed to decode JPEG image: %d (%s)", (int)ret,
+                             esp_err_to_name(ret));
                     if (out_data) {
                         heap_caps_free(out_data);
                         out_data = nullptr;
@@ -867,7 +917,8 @@ bool EspVideo::Capture() {
                 return false;
         }
 
-        auto image = std::make_unique<LvglAllocatedImage>(data, lvgl_image_size, w, h, stride, color_format);
+        auto image =
+            std::make_unique<LvglAllocatedImage>(data, lvgl_image_size, w, h, stride, color_format);
         display->SetPreviewImage(std::move(image));
     }
     return true;
@@ -921,28 +972,32 @@ bool EspVideo::SetVFlip(bool enabled) {
  * - 支持设备ID、客户端ID和认证令牌的HTTP头部配置
  *
  * @param question 要向AI提出的关于图像的问题，将作为表单字段发送
- * @return std::string 服务器返回的JSON格式响应字符串
- *         成功时包含AI分析结果，失败时包含错误信息
- *         格式示例：{"success": true, "result": "分析结果"}
- *                  {"success": false, "message": "错误信息"}
+ * @return 成功时返回服务器的 JSON 响应，失败时返回可读错误信息
  *
- * @note 调用此函数前必须先调用SetExplainUrl()设置服务器URL
+ * @note 旧入口使用SetExplainUrl()配置，新入口显式接收本次调用的URL和token
  * @note 函数会等待之前的编码线程完成后再开始新的处理
  * @warning 如果摄像头缓冲区为空或网络连接失败，将返回错误信息
  */
-std::string EspVideo::Explain(const std::string& question) {
-    if (explain_url_.empty()) {
-        throw std::runtime_error("Image explain URL or token is not set");
+std::expected<std::string, std::string> EspVideo::Explain(const std::string& question) {
+    return Explain(question, explain_url_, explain_token_);
+}
+
+std::expected<std::string, std::string> EspVideo::Explain(const std::string& question,
+                                                          const std::string& url,
+                                                          const std::string& token) {
+    if (url.empty()) {
+        return std::unexpected("Image explain URL or token is not set");
     }
 
     // 创建局部的 JPEG 队列, 40 entries is about to store 512 * 40 = 20480 bytes of JPEG data
     QueueHandle_t jpeg_queue = xQueueCreate(40, sizeof(JpegChunk));
     if (jpeg_queue == nullptr) {
         ESP_LOGE(TAG, "Failed to create JPEG queue");
-        throw std::runtime_error("Failed to create JPEG queue");
+        return std::unexpected("Failed to create JPEG queue");
     }
 
-    // We spawn a thread to encode the image to JPEG using optimized encoder (cost about 500ms and 8KB SRAM)
+    // We spawn a thread to encode the image to JPEG using optimized encoder (cost about 500ms and
+    // 8KB SRAM)
     encoder_thread_ = std::thread([this, jpeg_queue]() {
         uint16_t w = frame_.width ? frame_.width : 320;
         uint16_t h = frame_.height ? frame_.height : 240;
@@ -953,7 +1008,8 @@ std::string EspVideo::Explain(const std::string& question) {
                 auto jpeg_queue = static_cast<QueueHandle_t>(arg);
                 JpegChunk chunk = {.data = nullptr, .len = len};
                 if (index == 0 && data != nullptr && len > 0) {
-                    chunk.data = (uint8_t*)heap_caps_aligned_alloc(16, len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                    chunk.data = (uint8_t*)heap_caps_aligned_alloc(
+                        16, len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
                     if (chunk.data == nullptr) {
                         ESP_LOGE(TAG, "Failed to allocate %zu bytes for JPEG chunk", len);
                         chunk.len = 0;
@@ -974,57 +1030,19 @@ std::string EspVideo::Explain(const std::string& question) {
         }
     });
 
-    auto network = Board::GetInstance().GetNetwork();
-    auto http = network->CreateHttp(3);
     // 构造multipart/form-data请求体
     std::string boundary = "----ESP32_CAMERA_BOUNDARY";
+    std::string body;
+    body += "--" + boundary + "\r\n";
+    body += "Content-Disposition: form-data; name=\"question\"\r\n\r\n";
+    body += question + "\r\n";
+    body += "--" + boundary + "\r\n";
+    body += "Content-Disposition: form-data; name=\"file\"; filename=\"camera.jpg\"\r\n";
+    body += "Content-Type: image/jpeg\r\n\r\n";
 
-    // 配置HTTP客户端，使用分块传输编码
-    http->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
-    http->SetHeader("Client-Id", Board::GetInstance().GetUuid().c_str());
-    if (!explain_token_.empty()) {
-        http->SetHeader("Authorization", "Bearer " + explain_token_);
-    }
-    http->SetHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
-    http->SetHeader("Transfer-Encoding", "chunked");
-    if (!http->Open("POST", explain_url_)) {
-        ESP_LOGE(TAG, "Failed to connect to explain URL");
-        // Clear the queue
-        encoder_thread_.join();
-        JpegChunk chunk;
-        while (xQueueReceive(jpeg_queue, &chunk, portMAX_DELAY) == pdPASS) {
-            if (chunk.data != nullptr) {
-                heap_caps_free(chunk.data);
-            } else {
-                break;
-            }
-        }
-        vQueueDelete(jpeg_queue);
-        throw std::runtime_error("Failed to connect to explain URL");
-    }
-
-    {
-        // 第一块：question字段
-        std::string question_field;
-        question_field += "--" + boundary + "\r\n";
-        question_field += "Content-Disposition: form-data; name=\"question\"\r\n";
-        question_field += "\r\n";
-        question_field += question + "\r\n";
-        http->Write(question_field.c_str(), question_field.size());
-    }
-    {
-        // 第二块：文件字段头部
-        std::string file_header;
-        file_header += "--" + boundary + "\r\n";
-        file_header += "Content-Disposition: form-data; name=\"file\"; filename=\"camera.jpg\"\r\n";
-        file_header += "Content-Type: image/jpeg\r\n";
-        file_header += "\r\n";
-        http->Write(file_header.c_str(), file_header.size());
-    }
-
-    // 第三块：JPEG数据
-    size_t total_sent = 0;
+    // 服务器不支持分块上传，先收集完整JPEG再以Content-Length发送
     bool saw_terminator = false;
+    size_t jpeg_size = 0;
     while (true) {
         JpegChunk chunk;
         if (xQueueReceive(jpeg_queue, &chunk, portMAX_DELAY) != pdPASS) {
@@ -1033,34 +1051,46 @@ std::string EspVideo::Explain(const std::string& question) {
         }
         if (chunk.data == nullptr) {
             saw_terminator = true;
-            break;  // The last chunk
+            break;
         }
-        http->Write((const char*)chunk.data, chunk.len);
-        total_sent += chunk.len;
+        body.append(reinterpret_cast<const char*>(chunk.data), chunk.len);
+        jpeg_size += chunk.len;
         heap_caps_free(chunk.data);
     }
-    // Wait for the encoder thread to finish
     encoder_thread_.join();
-    // 清理队列
     vQueueDelete(jpeg_queue);
 
-    if (!saw_terminator || total_sent == 0) {
+    if (!saw_terminator || jpeg_size == 0) {
         ESP_LOGE(TAG, "JPEG encoder failed or produced empty output");
-        throw std::runtime_error("Failed to encode image to JPEG");
+        return std::unexpected("Failed to encode image to JPEG");
+    }
+    body += "\r\n--" + boundary + "--\r\n";
+
+    auto network = Board::GetInstance().GetNetwork();
+    auto http = network->CreateHttp(3);
+    http->SetHeader("Device-Id", SystemInfo::GetMacAddress().c_str());
+    http->SetHeader("Client-Id", Board::GetInstance().GetUuid().c_str());
+    if (!token.empty()) {
+        http->SetHeader("Authorization", "Bearer " + token);
+    }
+    http->SetHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+    http->SetContent(std::move(body));
+    if (auto opened = http->Open("POST", url); !opened) {
+        ESP_LOGE(TAG, "Failed to upload photo: %s", opened.error().ToString().c_str());
+        http->Close();
+        return std::unexpected("Failed to upload photo");
     }
 
-    {
-        // 第四块：multipart尾部
-        std::string multipart_footer;
-        multipart_footer += "\r\n--" + boundary + "--\r\n";
-        http->Write(multipart_footer.c_str(), multipart_footer.size());
+    auto status_code = http->GetStatusCode();
+    if (!status_code) {
+        ESP_LOGE(TAG, "Failed to read HTTP status: %s", status_code.error().ToString().c_str());
+        http->Close();
+        return std::unexpected("Failed to upload photo");
     }
-    // 结束块
-    http->Write("", 0);
-
-    if (http->GetStatusCode() != 200) {
-        ESP_LOGE(TAG, "Failed to upload photo, status code: %d", http->GetStatusCode());
-        throw std::runtime_error("Failed to upload photo");
+    if (*status_code != 200) {
+        ESP_LOGE(TAG, "Failed to upload photo, status code: %d", *status_code);
+        http->Close();
+        return std::unexpected("Failed to upload photo");
     }
 
     std::string result = http->ReadAll();
@@ -1068,7 +1098,9 @@ std::string EspVideo::Explain(const std::string& question) {
 
     // Get remain task stack size
     size_t remain_stack_size = uxTaskGetStackHighWaterMark(nullptr);
-    ESP_LOGI(TAG, "Explain image size=%d bytes, compressed size=%d, remain stack size=%d, question=%s\n%s",
-             (int)frame_.len, (int)total_sent, (int)remain_stack_size, question.c_str(), result.c_str());
+    ESP_LOGI(
+        TAG,
+        "Explain image size=%d bytes, compressed size=%d, remain stack size=%d, question=%s\n%s",
+        (int)frame_.len, (int)jpeg_size, (int)remain_stack_size, question.c_str(), result.c_str());
     return result;
 }

@@ -7,9 +7,9 @@
 #include <functional>
 #include <variant>
 #include <optional>
-#include <stdexcept>
 #include <thread>
 #include <mbedtls/base64.h>
+#include <esp_system.h>
 
 #include <cJSON.h>
 
@@ -79,17 +79,17 @@ public:
     Property(const std::string& name, PropertyType type, int min_value, int max_value)
         : name_(name), type_(type), has_default_value_(false), min_value_(min_value), max_value_(max_value) {
         if (type != kPropertyTypeInteger) {
-            throw std::invalid_argument("Range limits only apply to integer properties");
+            esp_system_abort("MCP property range is only valid for integer properties");
         }
     }
 
     Property(const std::string& name, PropertyType type, int default_value, int min_value, int max_value)
         : name_(name), type_(type), has_default_value_(true), min_value_(min_value), max_value_(max_value) {
         if (type != kPropertyTypeInteger) {
-            throw std::invalid_argument("Range limits only apply to integer properties");
+            esp_system_abort("MCP property range is only valid for integer properties");
         }
         if (default_value < min_value || default_value > max_value) {
-            throw std::invalid_argument("Default value must be within the specified range");
+            esp_system_abort("MCP property default is outside its declared range");
         }
         value_ = default_value;
     }
@@ -107,17 +107,18 @@ public:
     }
 
     template<typename T>
-    inline void set_value(const T& value) {
+    inline bool set_value(const T& value) {
         // 添加对设置的整数值进行范围检查
         if constexpr (std::is_same_v<T, int>) {
             if (min_value_.has_value() && value < min_value_.value()) {
-                throw std::invalid_argument("Value is below minimum allowed: " + std::to_string(min_value_.value()));
+                return false;
             }
             if (max_value_.has_value() && value > max_value_.value()) {
-                throw std::invalid_argument("Value exceeds maximum allowed: " + std::to_string(max_value_.value()));
+                return false;
             }
         }
         value_ = value;
+        return true;
     }
 
     std::string to_json() const {
@@ -172,7 +173,7 @@ public:
                 return property;
             }
         }
-        throw std::runtime_error("Property not found: " + name);
+        esp_system_abort("MCP property lookup failed because the property was not declared");
     }
 
     bool Has(const std::string& name) const {

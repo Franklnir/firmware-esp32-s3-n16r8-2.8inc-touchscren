@@ -12,13 +12,13 @@ void LcdDisplay::SetStatus(const char* status) {
     UpdateIdleDashboard();
 }
 
-void LcdDisplay::SetEmotion(const char* emotion) {
+bool LcdDisplay::SetEmotion(const char* emotion) {
     if (music_visualizer_active_) {
-        return;
+        return false;
     }
     if (ui_theme_id_ == 2) {
         // Theme 2 uses WeChat chat bubble UI without big center emoji
-        return;
+        return false;
     }
     if (!setup_ui_called_) {
         ESP_LOGW(TAG, "SetEmotion('%s') called before SetupUI() - emotion will not be displayed!",
@@ -31,7 +31,7 @@ void LcdDisplay::SetEmotion(const char* emotion) {
                      "emoji image not created)",
                      emotion);
         }
-        return;
+        return false;
     }
 
     auto emoji_collection = static_cast<LvglTheme*>(current_theme_)->emoji_collection();
@@ -58,7 +58,7 @@ void LcdDisplay::SetEmotion(const char* emotion) {
             if (emoji_box_)
                 lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, 0);
         }
-        return;
+        return utf8 != nullptr && emoji_label_ != nullptr;
     }
 
     DisplayLockGuard lock(this);
@@ -90,6 +90,7 @@ void LcdDisplay::SetEmotion(const char* emotion) {
         } else {
             ESP_LOGE(TAG, "Failed to load GIF for emotion: %s", emotion);
             gif_controller_.reset();
+            return false;
         }
     } else {
         lv_image_set_src(emoji_image_, image->image_dsc());
@@ -99,6 +100,7 @@ void LcdDisplay::SetEmotion(const char* emotion) {
         if (emoji_box_)
             lv_obj_align(emoji_box_, LV_ALIGN_CENTER, 0, 0);
     }
+    return true;
 }
 
 void LcdDisplay::SetEmojiCollection(std::shared_ptr<EmojiCollection> collection) {

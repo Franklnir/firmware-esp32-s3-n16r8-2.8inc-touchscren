@@ -2,6 +2,7 @@
 #include <esp_log.h>
 #include <esp_system.h>
 #include <esp_chip_info.h>
+#include <esp_timer.h>
 #include <cJSON.h>
 #include <sys/time.h>
 #include <ctime>
