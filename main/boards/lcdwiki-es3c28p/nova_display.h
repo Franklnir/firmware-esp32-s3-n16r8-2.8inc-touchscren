@@ -372,6 +372,7 @@ private:
     lv_obj_t* battery_percent_label_ = nullptr;
     lv_obj_t* battery_volt_label_ = nullptr;
     lv_obj_t* battery_state_label_ = nullptr;
+    lv_obj_t* battery_card_icon_ = nullptr;
     lv_obj_t* wifi_status_label_ = nullptr;
     lv_obj_t* wifi_modal_ = nullptr;
     lv_obj_t* wifi_ssid_input_ = nullptr;

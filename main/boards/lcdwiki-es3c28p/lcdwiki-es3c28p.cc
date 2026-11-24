@@ -453,22 +453,39 @@ public:
             baseline_voltage_mv_ = raw_vbat_mv;
             last_voltage_mv_ = (int)slow_voltage_mv_;
 
-            // Di atas 4220mV saat boot biasanya ada charger aktif yang menaikkan rel
-            is_charging_ = (raw_vbat_mv >= 4220.0f);
+            // Deteksi charger saat boot:
+            // 1. Tegangan mendekati jenuh charger (>= 4180mV)
+            // 2. ATAU ada saved_mv_ dari sebelum shutdown dan tegangan naik drastis (>= saved_mv_ + 60mV)
+            is_charging_ = (raw_vbat_mv >= 4180.0f);
+            if (!is_charging_ && saved_mv_ > 0 && (raw_vbat_mv >= saved_mv_ + 60.0f)) {
+                is_charging_ = true;
+                ESP_LOGI("LCDWikiBattery", "⚡ Charger terdeteksi saat boot! Vbat=%dmV > saved=%dmV + 60mV",
+                         (int)raw_vbat_mv, saved_mv_);
+            }
 
             int comp_v = GetCompensatedVoltageMv((int)slow_voltage_mv_, is_charging_);
             int init_pct = CalculateLiIonPercentage(comp_v);
 
-            // Anti-sag boot: Jika tersimpan di NVS dan selisih wajar, pertahankan level tersimpan
+            // Konsistensi Baterai Lintas Restart (NVS Persistence):
+            // Jangan biarkan persentase melompat saat perangkat di-restart!
             if (saved_soc_ >= 0 && saved_soc_ <= 100) {
-                if (!is_charging_) {
-                    if (init_pct <= saved_soc_ && init_pct >= saved_soc_ - 15) {
-                        displayed_percentage_ = saved_soc_;
-                    } else {
+                if (is_charging_) {
+                    // Saat sedang dicas, jangan sampai SoC turun dari level sebelum restart
+                    displayed_percentage_ = std::max(init_pct, saved_soc_);
+                } else {
+                    // Operasi baterai normal:
+                    // A. Baterai dicas saat mati? (tegangan naik signifikan > saved_soc_ + 5%)
+                    if (init_pct > saved_soc_ + 5) {
                         displayed_percentage_ = init_pct;
                     }
-                } else {
-                    displayed_percentage_ = std::max(init_pct, saved_soc_);
+                    // B. Baterai drop drastis / baterai diganti saat mati? (< saved_soc_ - 25%)
+                    else if (init_pct < saved_soc_ - 25) {
+                        displayed_percentage_ = init_pct;
+                    }
+                    // C. Normal reboot / restart / sag tegangan: pertahankan nilai tersimpan agar 100% konsisten!
+                    else {
+                        displayed_percentage_ = saved_soc_;
+                    }
                 }
             } else {
                 displayed_percentage_ = init_pct;
@@ -476,8 +493,9 @@ public:
 
             last_jump_check_ms_ = now;
             last_percent_step_ms_ = now;
-            ESP_LOGI("LCDWikiBattery", "Initial battery state: Vbat=%dmV, %s, SoC=%d%%",
-                     (int)slow_voltage_mv_, is_charging_ ? "Charging" : "Discharging", displayed_percentage_);
+            last_saved_soc_ = displayed_percentage_;
+            ESP_LOGI("LCDWikiBattery", "Initial battery state: Vbat=%dmV, %s, SoC=%d%% (NVS Restored=%d%%)",
+                     (int)slow_voltage_mv_, is_charging_ ? "Charging" : "Discharging", displayed_percentage_, saved_soc_);
             return;
         }
 
@@ -543,9 +561,9 @@ public:
         }
         displayed_percentage_ = std::clamp(displayed_percentage_, 0, 100);
 
-        // NVS Persistence (simpan setiap 60s jika persentase berubah)
+        // NVS Persistence (simpan ke NVS jika persentase berubah, debounce 5 detik)
         if (displayed_percentage_ >= 0 && displayed_percentage_ != last_saved_soc_) {
-            if (last_nvs_save_ms_ == 0 || (now - last_nvs_save_ms_ >= 60000)) {
+            if (last_nvs_save_ms_ == 0 || (now - last_nvs_save_ms_ >= 5000)) {
                 last_nvs_save_ms_ = now;
                 last_saved_soc_ = displayed_percentage_;
                 Settings b_set("battery", true);
@@ -556,6 +574,7 @@ public:
     }
 
     void SaveStateNow() {
+        std::lock_guard<std::mutex> lock(mutex_);
         if (displayed_percentage_ >= 0) {
             Settings b_set("battery", true);
             b_set.SetInt("last_soc", displayed_percentage_);
@@ -1326,6 +1345,12 @@ private:
 
     void InitializeBatteryMonitor() {
         battery_monitor_ = new LCDWikiBatteryMonitor(BATTERY_ADC_UNIT, BATTERY_ADC_CHANNEL, 200000.0f, 200000.0f);
+        static LCDWikiBatteryMonitor* s_bat_mon = battery_monitor_;
+        esp_register_shutdown_handler([]() {
+            if (s_bat_mon) {
+                s_bat_mon->SaveStateNow();
+            }
+        });
     }
 
     void InitializeLed() {

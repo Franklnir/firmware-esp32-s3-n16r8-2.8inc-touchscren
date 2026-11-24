@@ -950,10 +950,10 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
 
     top_battery_icon_ = lv_label_create(bat_btn);
     lv_obj_clear_flag(top_battery_icon_, LV_OBJ_FLAG_CLICKABLE);
-    lv_label_set_text(top_battery_icon_, bat_chg ? MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_BOLT
-                                                 : MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL);
+    lv_label_set_text(top_battery_icon_, NovaGetBatterySymbol(bat_lvl, bat_chg));
     lv_obj_set_style_text_font(top_battery_icon_, FONT_ICON, LV_PART_MAIN);
-    lv_obj_set_style_text_color(top_battery_icon_, icon_clr, LV_PART_MAIN);
+    lv_color_t bat_clr = bat_chg ? C_MINT : (bat_lvl <= 20 ? lv_color_hex(0xEF4444) : icon_clr);
+    lv_obj_set_style_text_color(top_battery_icon_, bat_clr, LV_PART_MAIN);
 
     top_battery_label_ = lv_label_create(bat_btn);
     lv_obj_clear_flag(top_battery_label_, LV_OBJ_FLAG_CLICKABLE);
@@ -961,7 +961,7 @@ void NovaDisplay::MakeHeader(lv_obj_t* root, const char* title, bool show_back) 
     snprintf(b_txt, sizeof(b_txt), "%d%%", bat_lvl);
     lv_label_set_text(top_battery_label_, b_txt);
     lv_obj_set_style_text_font(top_battery_label_, FONT_12, LV_PART_MAIN);
-    lv_obj_set_style_text_color(top_battery_label_, icon_clr, LV_PART_MAIN);
+    lv_obj_set_style_text_color(top_battery_label_, bat_clr, LV_PART_MAIN);
 
     if (bat_style_ == BAT_STYLE_ICON_ONLY) {
         lv_obj_center(top_battery_icon_);
@@ -1333,7 +1333,7 @@ lv_obj_t* NovaDisplay::NewRoot() {
 
     clock_label_ = date_label_ = timer_label_ = nullptr;
     brightness_value_label_ = battery_raw_label_ = battery_percent_label_ = nullptr;
-    battery_volt_label_ = battery_state_label_ = wifi_status_label_ = nullptr;
+    battery_volt_label_ = battery_state_label_ = battery_card_icon_ = wifi_status_label_ = nullptr;
     audio_volume_label_ = audio_volume_slider_ = nullptr;
     return root;
 }

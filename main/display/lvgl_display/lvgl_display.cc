@@ -331,20 +331,23 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
         if (charging) {
             icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_BOLT;
         } else {
-            const char* levels[] = {
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_0,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_1,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_2,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_3,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_4,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_5,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_6,
-                MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL,
-            };
-            int level_index = battery_level <= 0
-                                  ? 0
-                                  : (battery_level >= 100 ? 7 : 1 + ((battery_level - 1) * 6 / 99));
-            icon = levels[level_index];
+            if (battery_level <= 5) {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_0;
+            } else if (battery_level <= 19) {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_1;
+            } else if (battery_level <= 35) {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_2;
+            } else if (battery_level <= 50) {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_3;
+            } else if (battery_level <= 65) {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_4;
+            } else if (battery_level <= 80) {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_5;
+            } else if (battery_level <= 95) {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_6;
+            } else {
+                icon = MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL;
+            }
         }
 
         Settings prefs("nova", true);
@@ -363,6 +366,13 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
             }
         }
 
+        lv_color_t bat_clr = icon_clr;
+        if (charging) {
+            bat_clr = is_light_bg ? lv_color_hex(0x059669) : lv_color_hex(0x22C55E);
+        } else if (battery_level <= 20) {
+            bat_clr = lv_color_hex(0xEF4444);
+        }
+
         DisplayLockGuard lock(this);
         if (battery_label_ != nullptr) {
             if (bat_style == 2) {
@@ -371,7 +381,7 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
                 lv_obj_remove_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);
                 battery_icon_ = icon;
                 lv_label_set_text(battery_label_, battery_icon_);
-                lv_obj_set_style_text_color(battery_label_, icon_clr, 0);
+                lv_obj_set_style_text_color(battery_label_, bat_clr, 0);
             }
         }
         if (battery_pct_label_ != nullptr) {
@@ -382,7 +392,7 @@ void LvglDisplay::UpdateStatusBar(bool update_all) {
                 char pct_str[16];
                 snprintf(pct_str, sizeof(pct_str), "%d%%", battery_level);
                 lv_label_set_text(battery_pct_label_, pct_str);
-                lv_obj_set_style_text_color(battery_pct_label_, icon_clr, 0);
+                lv_obj_set_style_text_color(battery_pct_label_, bat_clr, 0);
             }
         }
 

@@ -1225,7 +1225,8 @@ void NovaDisplay::BuildBattery() {
         // === LANDSCAPE LAYOUT (320x240) ===
         // Left Column (x=10, w=146): Status Card + Style Switcher
         lv_obj_t* card = MakePanel(root, 10, 38, 146, 76, C_PANEL, C_BORDER, 10);
-        MakeIcon(card, ICON_BATTERY, 8, 8, C_MINT, 22);
+        battery_card_icon_ = MakeIcon(card, ICON_BATTERY, 8, 8, chg ? C_CYAN : (level <= 20 ? C_RED : C_MINT), 22);
+        lv_label_set_text(battery_card_icon_, NovaGetBatterySymbol(level, chg));
         char pct_str[32];
         snprintf(pct_str, sizeof(pct_str), "%d%%", level);
         battery_percent_label_ =
@@ -1306,7 +1307,8 @@ void NovaDisplay::BuildBattery() {
         MakeLabel(root, "STATUS BATERAI", 14, 38, 212, 13, FONT_10, C_MUTED);
 
         lv_obj_t* card = MakePanel(root, 12, 54, 216, 78, C_PANEL, C_BORDER, 10);
-        MakeIcon(card, ICON_BATTERY, 8, 8, C_MINT, 24);
+        battery_card_icon_ = MakeIcon(card, ICON_BATTERY, 8, 8, chg ? C_CYAN : (level <= 20 ? C_RED : C_MINT), 24);
+        lv_label_set_text(battery_card_icon_, NovaGetBatterySymbol(level, chg));
         char pct_str[32];
         snprintf(pct_str, sizeof(pct_str), "%d%%", level);
         battery_percent_label_ =

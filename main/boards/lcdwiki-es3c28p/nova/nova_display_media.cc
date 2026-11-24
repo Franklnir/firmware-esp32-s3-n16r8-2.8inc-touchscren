@@ -256,16 +256,17 @@ void NovaDisplay::UpdateLiveLabels() {
         lv_obj_set_style_text_color(top_wifi_icon_, icon_clr, LV_PART_MAIN);
     }
 
-    if (battery_percent_label_ || battery_volt_label_ || top_battery_icon_ || top_battery_label_) {
+    if (battery_percent_label_ || battery_volt_label_ || top_battery_icon_ || top_battery_label_ || battery_card_icon_ || battery_state_label_) {
         int level = 100, mv = 0, raw = 0;
         bool chg = false;
         if (callbacks_.get_battery)
             callbacks_.get_battery(level, chg, mv, raw);
 
+        lv_color_t bat_clr = chg ? C_MINT : (level <= 20 ? lv_color_hex(0xEF4444) : icon_clr);
+
         if (top_battery_icon_) {
-            lv_label_set_text(top_battery_icon_, chg ? MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_BOLT
-                                                     : MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL);
-            lv_obj_set_style_text_color(top_battery_icon_, icon_clr, LV_PART_MAIN);
+            lv_label_set_text(top_battery_icon_, NovaGetBatterySymbol(level, chg));
+            lv_obj_set_style_text_color(top_battery_icon_, bat_clr, LV_PART_MAIN);
             if (bat_style_ == BAT_STYLE_PERCENT_ONLY) {
                 lv_obj_add_flag(top_battery_icon_, LV_OBJ_FLAG_HIDDEN);
             } else {
@@ -276,12 +277,22 @@ void NovaDisplay::UpdateLiveLabels() {
             char pct[16];
             snprintf(pct, sizeof(pct), "%d%%", level);
             lv_label_set_text(top_battery_label_, pct);
-            lv_obj_set_style_text_color(top_battery_label_, icon_clr, LV_PART_MAIN);
+            lv_obj_set_style_text_color(top_battery_label_, bat_clr, LV_PART_MAIN);
             if (bat_style_ == BAT_STYLE_ICON_ONLY) {
                 lv_obj_add_flag(top_battery_label_, LV_OBJ_FLAG_HIDDEN);
             } else {
                 lv_obj_clear_flag(top_battery_label_, LV_OBJ_FLAG_HIDDEN);
             }
+        }
+        if (battery_card_icon_ && lv_obj_is_valid(battery_card_icon_)) {
+            lv_label_set_text(battery_card_icon_, NovaGetBatterySymbol(level, chg));
+            lv_obj_set_style_text_color(battery_card_icon_, chg ? C_CYAN : (level <= 20 ? C_RED : C_MINT), LV_PART_MAIN);
+        }
+        if (battery_state_label_ && lv_obj_is_valid(battery_state_label_)) {
+            char state_str[48];
+            snprintf(state_str, sizeof(state_str), "%s", chg ? "Sedang Mengisi Daya" : "Menggunakan Baterai");
+            lv_label_set_text(battery_state_label_, state_str);
+            lv_obj_set_style_text_color(battery_state_label_, chg ? C_MINT : C_MUTED, LV_PART_MAIN);
         }
         if (battery_percent_label_) {
             char pct[16];

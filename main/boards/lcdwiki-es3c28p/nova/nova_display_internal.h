@@ -79,6 +79,29 @@ LV_FONT_DECLARE(font_material_symbols_30_4);
 #define FONT_36 (&lv_font_montserrat_24)
 #define FONT_ICON (&font_material_symbols_20_4)
 
+inline const char* NovaGetBatterySymbol(int level, bool charging) {
+    if (charging) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_BOLT;
+    }
+    if (level <= 5) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_0;
+    } else if (level <= 19) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_1;
+    } else if (level <= 35) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_2;
+    } else if (level <= 50) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_3;
+    } else if (level <= 65) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_4;
+    } else if (level <= 80) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_5;
+    } else if (level <= 95) {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_6;
+    } else {
+        return MATERIAL_SYMBOLS_BATTERY_ANDROID_FRAME_FULL;
+    }
+}
+
 extern lv_color_t C_BG;
 extern lv_color_t C_PANEL;
 extern lv_color_t C_PANEL_2;
