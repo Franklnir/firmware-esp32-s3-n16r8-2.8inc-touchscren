@@ -648,18 +648,16 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
     }
     size_t free_sram = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 
-    std::string current_bitrate = "32k";
+    std::string current_bitrate = "40k";
 #if CONFIG_IDF_TARGET_ESP32S3
-    if (rssi >= -68) {
-        current_bitrate = "40k"; // Sinyal Kuat: 40k Max Fidelity
-    } else if (rssi >= -76) {
-        current_bitrate = "32k"; // Sinyal Bagus: 32k
-    } else if (rssi >= -82) {
-        current_bitrate = "24k"; // Sinyal Sedang: 24k
+    if (rssi >= -78) {
+        current_bitrate = "40k"; // Sinyal Kuat/Bagus (ruangan normal): Langsung 40k Max Fidelity!
+    } else if (rssi >= -84) {
+        current_bitrate = "32k"; // Sinyal Sedang: 32k
     } else if (rssi >= -88) {
-        current_bitrate = "16k"; // Sinyal Lemah: 16k
+        current_bitrate = "24k"; // Sinyal Lemah: 24k
     } else {
-        current_bitrate = "12k"; // Sinyal Sangat Lemah: 12k
+        current_bitrate = "16k"; // Sinyal Sangat Lemah: 16k
     }
     static const size_t kOggBufCap = 16384; // 16KB buffer leveraging 8MB PSRAM
 #else
@@ -833,13 +831,18 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
         int64_t last_progress_sync_us = 0;
 
         // Dynamic Pre-Buffer (Jitter Buffer):
-        // Target ~800ms - 1200ms buffer agar pemutaran lagu YouTube jauh lebih lancar & anti stutter/buffer underrun
-        size_t prebuffer_target = (detected_frame_duration_ms <= 20) ? 45 : 16;
-        if (live_rssi < -78) {
-            prebuffer_target = (detected_frame_duration_ms <= 20) ? 60 : 22; // Sinyal lemah: buffer lebih besar
+        // Jika stream awal (frames_pushed == 0), kumpulkan ~700-900ms buffer agar playback awal solid.
+        // Jika RECONNECT / HANDOVER KUALITAS (frames_pushed > 0), JANGAN ditahan prebuffer!
+        // Dorong paket baru secepatnya ke antrean decoder agar menyambung mulus tanpa jeda (gapless bridge).
+        bool is_prebuffering = (frames_pushed == 0);
+        size_t prebuffer_target = 0;
+        if (is_prebuffering) {
+            prebuffer_target = (detected_frame_duration_ms <= 20) ? 35 : 14;
+            if (live_rssi < -78) {
+                prebuffer_target = (detected_frame_duration_ms <= 20) ? 45 : 18;
+            }
         }
         std::vector<std::unique_ptr<AudioStreamPacket>> prebuffer;
-        bool is_prebuffering = true;
 
         while (running_.load() && !abort_requested_.load()) {
                 int64_t now_us = esp_timer_get_time();
@@ -917,11 +920,13 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
                 }
 
                 // 2. Adaptive Upshift (Slow & Safe Climb - Golden Rule: Drop Fast, Climb Slow):
-                // Jika bitrate di bawah 48k, cooldown downshift > 40s, dan antrean decode sehat (>= 8 frame) selama 35s kontinu:
+                // Jika bitrate di bawah 40k, cooldown downshift > 60s, dan antrean decode tebal (>= 25 frame / 500ms) selama 50s kontinu:
 #if CONFIG_IDF_TARGET_ESP32S3
-                if (current_bitrate != "40k" && frames_pushed > 20) {
+                if (current_bitrate != "40k" && frames_pushed > 50) {
                     size_t q_size = app.GetAudioService().GetDecodeQueueSize();
-                    bool queue_healthy = (q_size >= 8 && !playback_idle);
+                    // Antrean harus memiliki bantalan audio yang tebal (>= 25 frame / 500ms) agar speaker tetap bersuara
+                    // tanpa jeda saat koneksi stream baru dibuat!
+                    bool queue_healthy = (q_size >= 25 && !playback_idle);
 
                     bool rssi_qualified = false;
                     std::string next_tier;
@@ -931,18 +936,18 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
                     } else if (current_bitrate == "16k" && live_rssi >= -78) {
                         next_tier = "24k";
                         rssi_qualified = true;
-                    } else if (current_bitrate == "24k" && live_rssi >= -72) {
+                    } else if (current_bitrate == "24k" && live_rssi >= -74) {
                         next_tier = "32k";
                         rssi_qualified = true;
-                    } else if (current_bitrate == "32k" && live_rssi >= -65) {
+                    } else if (current_bitrate == "32k" && live_rssi >= -68) {
                         next_tier = "40k";
                         rssi_qualified = true;
                     }
 
                     if (queue_healthy && rssi_qualified) {
-                        if (now_us - last_downshift_time_us > 40000000) { // Cooldown 40 detik
-                            if (now_us - upshift_healthy_start_us > 35000000) { // 35 detik konsisten sehat
-                                ESP_LOGI(TAG, "Network condition excellent! Sustained healthy buffer & RSSI=%d dBm for 35s. Upshifting %s -> %s at %.2fs",
+                        if (now_us - last_downshift_time_us > 60000000) { // Cooldown 60 detik
+                            if (now_us - upshift_healthy_start_us > 50000000) { // 50 detik konsisten sehat
+                                ESP_LOGI(TAG, "Network condition excellent! Sustained healthy buffer & RSSI=%d dBm for 50s. Seamlessly upshifting %s -> %s at %.2fs",
                                          live_rssi, current_bitrate.c_str(), next_tier.c_str(), frames_pushed * frame_sec);
                                 current_bitrate = next_tier;
                                 {
