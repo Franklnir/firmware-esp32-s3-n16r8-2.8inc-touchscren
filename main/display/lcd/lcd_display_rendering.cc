@@ -4,7 +4,7 @@ void LcdDisplay::SetStatus(const char* status) {
     if (music_visualizer_active_ && status != nullptr) {
         // Allow music status updates while visualizer is active, prevent standard state strings
         // (like SPEAKING) from replacing it
-        if (strcmp(status, "🎧 DJ PLAYING") != 0 && strncmp(status, "🎵", 3) != 0) {
+        if (strncmp(status, "🎧 DJ PLAYING", 13) != 0 && strncmp(status, "🎵", 3) != 0) {
             return;
         }
     }

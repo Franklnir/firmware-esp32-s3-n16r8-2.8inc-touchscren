@@ -55,6 +55,9 @@ protected:
     lv_timer_t* music_anim_timer_ = nullptr;
     int music_anim_phase_ = 0;
     bool music_visualizer_active_ = false;
+    std::string current_music_quality_ = "32k";
+    int current_music_sec_ = 0;
+    int total_music_sec_ = 0;
 
     int ui_theme_id_ = 2;
     bool is_st7789_ = false;
@@ -221,6 +224,7 @@ public:
     virtual void StopMusicVisualizer() override;
     virtual void SetMusicProgress(int current_sec, int total_sec) override { UpdateMusicProgress(current_sec, total_sec); }
     virtual void UpdateMusicProgress(int current_sec, int total_sec) override;
+    virtual void SetMusicBitrate(const char* bitrate) override;
     virtual bool IsMusicVisualizerActive() const override { return music_visualizer_active_; }
     void AnimateMusicVisualizer();
 

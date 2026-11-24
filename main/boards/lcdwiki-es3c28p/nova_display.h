@@ -64,6 +64,7 @@ struct NovaCallbacks {
     std::function<void(const std::string& video_id, const std::string& title, const std::string& duration)> play_online;
     std::function<void()> stop_online;
     std::function<bool()> is_online_playing;
+    std::function<std::string()> get_online_bitrate;
     std::function<bool(const std::string& query, const std::string& title)> download_online;
     std::function<void()> trigger_click;
     std::function<void(int sound_id)> play_sound;

@@ -38,6 +38,10 @@ public:
     std::vector<OnlineSongInfo> GetCachedPlaylist();
     void RefreshPlaylistAsync(std::function<void()> on_complete = nullptr);
     bool IsFetchingPlaylist() const { return is_fetching_playlist_.load(); }
+    std::string GetCurrentBitrate() const {
+        std::lock_guard<std::mutex> lock(bitrate_mutex_);
+        return current_bitrate_;
+    }
 
 private:
     YouTubeAudioPoller();
@@ -75,6 +79,8 @@ private:
     std::mutex playlist_mutex_;
     std::atomic<bool> is_fetching_playlist_{false};
     std::atomic<bool> has_real_playlist_{false};
+    mutable std::mutex bitrate_mutex_;
+    std::string current_bitrate_ = "32k";
 };
 
 #endif // YOUTUBE_AUDIO_POLLER_H_

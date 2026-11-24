@@ -48,7 +48,8 @@ void LcdDisplay::CreateMusicVisualizerUI() {
         // YouTube Music Header Badge (Single clean header label without colliding "Playing..."
         // text)
         music_sub_label_ = lv_label_create(music_container_);
-        lv_label_set_text(music_sub_label_, "▶ YouTube Music");
+        std::string sub_badge = "▶ YouTube Music • " + current_music_quality_;
+        lv_label_set_text(music_sub_label_, sub_badge.c_str());
         lv_obj_set_style_text_color(music_sub_label_, lv_color_hex(0xE53935), 0);  // YouTube Red
 
         // Title Label with circular marquee
@@ -99,7 +100,9 @@ void LcdDisplay::CreateMusicVisualizerUI() {
         lv_obj_set_style_text_color(music_duration_label_, lv_color_hex(0x07C160),
                                     0);  // WhatsApp Green
         lv_obj_set_style_text_font(music_duration_label_, lvgl_theme->text_font()->font(), 0);
-        lv_label_set_text(music_duration_label_, "⏱ 00:00 / --:--");
+        char init_dur2[64];
+        snprintf(init_dur2, sizeof(init_dur2), "⏱ 00:00 / --:-- • %s", current_music_quality_.c_str());
+        lv_label_set_text(music_duration_label_, init_dur2);
 
         // WhatsApp-style timestamp footer
         time_t now = time(NULL);
@@ -191,7 +194,9 @@ void LcdDisplay::CreateMusicVisualizerUI() {
         lv_obj_set_style_text_align(music_duration_label_, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_color(music_duration_label_, lv_color_hex(0x00E676), 0);
         lv_obj_set_style_text_font(music_duration_label_, lvgl_theme->text_font()->font(), 0);
-        lv_label_set_text(music_duration_label_, "00:00 / --:--");
+        char init_dur1[64];
+        snprintf(init_dur1, sizeof(init_dur1), "00:00 / --:-- • %s", current_music_quality_.c_str());
+        lv_label_set_text(music_duration_label_, init_dur1);
         music_title_label_ = nullptr;
         music_sub_label_ = nullptr;
     }
@@ -242,6 +247,8 @@ void LcdDisplay::StartMusicVisualizer(const char* title, int total_sec) {
         return;
 
     music_visualizer_active_ = true;
+    current_music_sec_ = 0;
+    total_music_sec_ = total_sec;
 
     // Hide preview image or camera if any
     if (preview_image_ != nullptr) {
@@ -259,7 +266,8 @@ void LcdDisplay::StartMusicVisualizer(const char* title, int total_sec) {
     // In Theme 2: if previous music_container_ was active, finalize it cleanly
     if (ui_theme_id_ == 2 && music_container_ != nullptr) {
         if (music_sub_label_ != nullptr) {
-            lv_label_set_text(music_sub_label_, "⏹ YouTube Music");
+            std::string sub_badge = "⏹ YouTube Music • " + current_music_quality_;
+            lv_label_set_text(music_sub_label_, sub_badge.c_str());
             lv_obj_set_style_text_opa(music_sub_label_, LV_OPA_60, 0);
         }
         for (int i = 0; i < 7; i++) {
@@ -286,18 +294,20 @@ void LcdDisplay::StartMusicVisualizer(const char* title, int total_sec) {
         lv_label_set_text(music_title_label_, title);
     }
     if (music_duration_label_ != nullptr) {
+        char buf[64];
+        const char* prefix = (ui_theme_id_ == 2) ? "⏱ " : "";
         if (total_sec > 0) {
-            char buf[40];
             if (total_sec >= 3600) {
-                snprintf(buf, sizeof(buf), "00:00:00 / %02d:%02d:%02d", total_sec / 3600,
-                         (total_sec % 3600) / 60, total_sec % 60);
+                snprintf(buf, sizeof(buf), "%s00:00:00 / %02d:%02d:%02d • %s", prefix, total_sec / 3600,
+                         (total_sec % 3600) / 60, total_sec % 60, current_music_quality_.c_str());
             } else {
-                snprintf(buf, sizeof(buf), "00:00 / %02d:%02d", total_sec / 60, total_sec % 60);
+                snprintf(buf, sizeof(buf), "%s00:00 / %02d:%02d • %s", prefix, total_sec / 60,
+                         total_sec % 60, current_music_quality_.c_str());
             }
-            lv_label_set_text(music_duration_label_, buf);
         } else {
-            lv_label_set_text(music_duration_label_, "00:00 / --:--");
+            snprintf(buf, sizeof(buf), "%s00:00 / --:-- • %s", prefix, current_music_quality_.c_str());
         }
+        lv_label_set_text(music_duration_label_, buf);
     }
 
     // Start animation timer if not already created
@@ -325,7 +335,8 @@ void LcdDisplay::StartMusicVisualizer(const char* title, int total_sec) {
             lv_obj_scroll_to_view_recursive(music_container_, LV_ANIM_ON);
         }
     } else {
-        SetStatus("🎧 DJ PLAYING");
+        std::string st = "🎧 DJ PLAYING • " + current_music_quality_;
+        SetStatus(st.c_str());
         if (title && title[0] != '\0') {
             std::string song_display = "🎵 " + std::string(title);
             SetChatMessage("assistant", song_display.c_str());
@@ -347,7 +358,8 @@ void LcdDisplay::StopMusicVisualizer() {
     if (ui_theme_id_ == 2) {
         // In Theme 2 (WhatsApp Chat): keep the music bubble in the chat log, set status to finished
         if (music_sub_label_ != nullptr) {
-            lv_label_set_text(music_sub_label_, "⏹ YouTube Music");
+            std::string sub_badge = "⏹ YouTube Music • " + current_music_quality_;
+            lv_label_set_text(music_sub_label_, sub_badge.c_str());
             lv_obj_set_style_text_opa(music_sub_label_, LV_OPA_60, 0);
         }
         for (int i = 0; i < 7; i++) {
@@ -379,19 +391,50 @@ void LcdDisplay::StopMusicVisualizer() {
 
 void LcdDisplay::UpdateMusicProgress(int current_sec, int total_sec) {
     DisplayLockGuard lock(this);
+    current_music_sec_ = current_sec;
+    total_music_sec_ = total_sec;
     if (!music_visualizer_active_ || music_duration_label_ == nullptr)
         return;
 
-    char buf[40];
+    char buf[64];
+    const char* prefix = (ui_theme_id_ == 2) ? "⏱ " : "";
     if (total_sec >= 3600 || current_sec >= 3600) {
-        snprintf(buf, sizeof(buf), "%02d:%02d:%02d / %02d:%02d:%02d", current_sec / 3600,
-                 (current_sec % 3600) / 60, current_sec % 60, total_sec / 3600,
-                 (total_sec % 3600) / 60, total_sec % 60);
+        snprintf(buf, sizeof(buf), "%s%02d:%02d:%02d / %02d:%02d:%02d • %s", prefix,
+                 current_sec / 3600, (current_sec % 3600) / 60, current_sec % 60,
+                 total_sec / 3600, (total_sec % 3600) / 60, total_sec % 60,
+                 current_music_quality_.c_str());
     } else if (total_sec > 0) {
-        snprintf(buf, sizeof(buf), "%02d:%02d / %02d:%02d", current_sec / 60, current_sec % 60,
-                 total_sec / 60, total_sec % 60);
+        snprintf(buf, sizeof(buf), "%s%02d:%02d / %02d:%02d • %s", prefix,
+                 current_sec / 60, current_sec % 60, total_sec / 60, total_sec % 60,
+                 current_music_quality_.c_str());
     } else {
-        snprintf(buf, sizeof(buf), "%02d:%02d / --:--", current_sec / 60, current_sec % 60);
+        snprintf(buf, sizeof(buf), "%s%02d:%02d / --:-- • %s", prefix,
+                 current_sec / 60, current_sec % 60, current_music_quality_.c_str());
     }
     lv_label_set_text(music_duration_label_, buf);
+}
+
+void LcdDisplay::SetMusicBitrate(const char* bitrate) {
+    DisplayLockGuard lock(this);
+    if (!bitrate || bitrate[0] == '\0') {
+        return;
+    }
+    current_music_quality_ = bitrate;
+    if (!music_visualizer_active_) {
+        return;
+    }
+
+    if (ui_theme_id_ == 2) {
+        if (music_sub_label_ != nullptr) {
+            std::string sub = "▶ YouTube Music • " + current_music_quality_;
+            lv_label_set_text(music_sub_label_, sub.c_str());
+        }
+    } else {
+        std::string st = "🎧 DJ PLAYING • " + current_music_quality_;
+        SetStatus(st.c_str());
+    }
+
+    if (music_duration_label_ != nullptr) {
+        UpdateMusicProgress(current_music_sec_, total_music_sec_);
+    }
 }

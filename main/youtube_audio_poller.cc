@@ -640,43 +640,6 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
         }
     }
 
-    std::string display_title = "[PLAY] " + title;
-    if (display != nullptr) {
-        display->StartMusicVisualizer(title.c_str());
-        display->UpdateMusicProgress(0, total_duration_sec);
-        display->ShowNotification(display_title.c_str(), 5000);
-    }
-
-    auto codec = Board::GetInstance().GetAudioCodec();
-    if (codec != nullptr) {
-        if (!codec->output_enabled()) {
-            codec->EnableOutput(true);
-        }
-        if (codec->output_volume() <= 0) {
-            codec->SetOutputVolume(70);
-        }
-        ESP_LOGI(TAG, "Audio playback using current device volume: %d%%", codec->output_volume());
-    }
-
-    Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
-    esp_wifi_set_ps(WIFI_PS_NONE);
-
-    // Reset decoder to clear any leftover TTS audio in the queue
-    app.GetAudioService().ResetDecoder();
-    vTaskDelay(pdMS_TO_TICKS(50));
-
-    auto network = Board::GetInstance().GetNetwork();
-    if (network == nullptr) {
-        is_playing_ = false;
-        if (display != nullptr) {
-            display->StopMusicVisualizer();
-        }
-        Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
-        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-        app.SetDeviceState(kDeviceStateIdle);
-        return;
-    }
-
     // 1. Initial Bitrate Evaluation based on Wi-Fi RSSI & Free Internal SRAM
     wifi_ap_record_t ap_info;
     int8_t rssi = -100;
@@ -713,6 +676,49 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
 #endif
     ESP_LOGI(TAG, "Adaptive Profile Selected: RSSI=%d dBm, FreeSRAM=%u B -> Bitrate=%s",
              rssi, (unsigned int)free_sram, current_bitrate.c_str());
+
+    {
+        std::lock_guard<std::mutex> lock(bitrate_mutex_);
+        current_bitrate_ = current_bitrate;
+    }
+
+    std::string display_title = "[PLAY] " + title;
+    if (display != nullptr) {
+        display->SetMusicBitrate(current_bitrate.c_str());
+        display->StartMusicVisualizer(title.c_str());
+        display->UpdateMusicProgress(0, total_duration_sec);
+        display->ShowNotification(display_title.c_str(), 5000);
+    }
+
+    auto codec = Board::GetInstance().GetAudioCodec();
+    if (codec != nullptr) {
+        if (!codec->output_enabled()) {
+            codec->EnableOutput(true);
+        }
+        if (codec->output_volume() <= 0) {
+            codec->SetOutputVolume(70);
+        }
+        ESP_LOGI(TAG, "Audio playback using current device volume: %d%%", codec->output_volume());
+    }
+
+    Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::PERFORMANCE);
+    esp_wifi_set_ps(WIFI_PS_NONE);
+
+    // Reset decoder to clear any leftover TTS audio in the queue
+    app.GetAudioService().ResetDecoder();
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    auto network = Board::GetInstance().GetNetwork();
+    if (network == nullptr) {
+        is_playing_ = false;
+        if (display != nullptr) {
+            display->StopMusicVisualizer();
+        }
+        Board::GetInstance().SetPowerSaveLevel(PowerSaveLevel::LOW_POWER);
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        app.SetDeviceState(kDeviceStateIdle);
+        return;
+    }
 
     static const uint8_t OGGS_MAGIC[4] = {'O', 'g', 'g', 'S'};
     uint8_t* raw_ogg = (uint8_t*)heap_caps_malloc(kOggBufCap, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -893,6 +899,14 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
                         }
 #endif
                         if (need_downshift) {
+                            {
+                                std::lock_guard<std::mutex> lock(bitrate_mutex_);
+                                current_bitrate_ = current_bitrate;
+                            }
+                            if (display != nullptr) {
+                                display->SetMusicBitrate(current_bitrate.c_str());
+                                display->ShowNotification(("Kualitas: " + current_bitrate).c_str(), 2000);
+                            }
                             last_downshift_time_us = now_us;
                             upshift_healthy_start_us = now_us;
                             ESP_LOGW(TAG, "Watchdog recovered stream by downshifting/reconnecting to %s at %.2fs",
@@ -931,6 +945,14 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
                                 ESP_LOGI(TAG, "Network condition excellent! Sustained healthy buffer & RSSI=%d dBm for 35s. Upshifting %s -> %s at %.2fs",
                                          live_rssi, current_bitrate.c_str(), next_tier.c_str(), frames_pushed * frame_sec);
                                 current_bitrate = next_tier;
+                                {
+                                    std::lock_guard<std::mutex> lock(bitrate_mutex_);
+                                    current_bitrate_ = current_bitrate;
+                                }
+                                if (display != nullptr) {
+                                    display->SetMusicBitrate(current_bitrate.c_str());
+                                    display->ShowNotification(("Kualitas: " + current_bitrate).c_str(), 2000);
+                                }
                                 need_downshift = true; // Reconnect bersih ke tingkat bitrate lebih tinggi
                                 upshift_healthy_start_us = now_us;
                                 break;
@@ -1000,6 +1022,16 @@ void YouTubeAudioPoller::StreamAudio(const std::string& video_id, const std::str
                                  downshift_retries, kMaxRetries, frames_pushed * frame_sec);
                     }
 #endif
+                    if (need_downshift) {
+                        {
+                            std::lock_guard<std::mutex> lock(bitrate_mutex_);
+                            current_bitrate_ = current_bitrate;
+                        }
+                        if (display != nullptr) {
+                            display->SetMusicBitrate(current_bitrate.c_str());
+                            display->ShowNotification(("Kualitas: " + current_bitrate).c_str(), 2000);
+                        }
+                    }
                     break;
                 }
                 if (n == 0) {

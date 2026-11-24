@@ -65,6 +65,7 @@ public:
     virtual void SetMusicProgress(int current_sec, int total_sec) { UpdateMusicProgress(current_sec, total_sec); }
     virtual void StopMusicVisualizer() {}
     virtual void UpdateMusicProgress(int current_sec, int total_sec) {}
+    virtual void SetMusicBitrate(const char* bitrate) {}
     virtual bool IsMusicVisualizerActive() const { return false; }
     virtual int GetUiThemeId() const { return 1; }
     virtual bool SetUiThemeId(int theme_id) { return false; }

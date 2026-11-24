@@ -1966,6 +1966,9 @@ private:
         cb.is_online_playing = []() {
             return YouTubeAudioPoller::GetInstance().IsPlaying();
         };
+        cb.get_online_bitrate = []() -> std::string {
+            return YouTubeAudioPoller::GetInstance().GetCurrentBitrate();
+        };
         cb.download_online = [](const std::string& q, const std::string& t) -> bool {
             return false;
         };

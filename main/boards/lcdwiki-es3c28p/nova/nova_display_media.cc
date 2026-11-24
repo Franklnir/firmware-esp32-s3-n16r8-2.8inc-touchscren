@@ -548,7 +548,15 @@ void NovaDisplay::ShowAudioPlayerModal(const std::string& title,
             s_domain = "xiaozhiscig.biz.id";
         }
         if (!s_domain.empty()) {
-            snprintf(sub_str, sizeof(sub_str), "%s • ES8311 DAC", s_domain.c_str());
+            std::string br_str;
+            if (callbacks_.get_online_bitrate) {
+                br_str = callbacks_.get_online_bitrate();
+            }
+            if (!br_str.empty()) {
+                snprintf(sub_str, sizeof(sub_str), "%s • %s Opus", s_domain.c_str(), br_str.c_str());
+            } else {
+                snprintf(sub_str, sizeof(sub_str), "%s • ES8311 DAC", s_domain.c_str());
+            }
         } else {
             snprintf(sub_str, sizeof(sub_str), "Online Stream • ES8311 DAC");
         }
@@ -616,8 +624,20 @@ void NovaDisplay::ShowAudioPlayerModal(const std::string& title,
         is_playing = callbacks_.is_audio_playing && callbacks_.is_audio_playing();
     }
 
+    std::string init_br;
+    if (is_online && callbacks_.get_online_bitrate) {
+        init_br = callbacks_.get_online_bitrate();
+    }
+    char init_state_buf[48];
+    if (is_playing && !init_br.empty()) {
+        snprintf(init_state_buf, sizeof(init_state_buf), "● MEMUTAR (ES8311 • %s)", init_br.c_str());
+    } else {
+        snprintf(init_state_buf, sizeof(init_state_buf), "%s",
+                 is_playing ? "● SEDANG MEMUTAR (ES8311)" : "○ SIAP DIPUTAR");
+    }
+
     lv_obj_t* state_lbl =
-        MakeLabel(anim_box, is_playing ? "● SEDANG MEMUTAR (ES8311)" : "○ SIAP DIPUTAR", 4,
+        MakeLabel(anim_box, init_state_buf, 4,
                   (height_ < 260 ? 36 : 48), card_w - 24, 16, FONT_10,
                   is_playing ? C_CYAN : lv_color_hex(0x71717A));
     lv_obj_set_style_text_align(state_lbl, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -664,7 +684,17 @@ void NovaDisplay::ShowAudioPlayerModal(const std::string& title,
                 lv_obj_set_style_text_color(
                     c->hp_icon, ((c->phase / 4) % 2 == 0) ? C_CYAN : lv_color_hex(0xA5F3FC),
                     LV_PART_MAIN);
-                lv_label_set_text(c->state_lbl, "● SEDANG MEMUTAR (ES8311)");
+                std::string cur_br;
+                if (c->is_online && c->self->callbacks_.get_online_bitrate) {
+                    cur_br = c->self->callbacks_.get_online_bitrate();
+                }
+                char state_buf[48];
+                if (!cur_br.empty()) {
+                    snprintf(state_buf, sizeof(state_buf), "● MEMUTAR (ES8311 • %s)", cur_br.c_str());
+                } else {
+                    snprintf(state_buf, sizeof(state_buf), "● SEDANG MEMUTAR (ES8311)");
+                }
+                lv_label_set_text(c->state_lbl, state_buf);
                 lv_obj_set_style_text_color(c->state_lbl, C_CYAN, LV_PART_MAIN);
             } else {
                 for (int i = 0; i < 6; i++) {
