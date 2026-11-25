@@ -608,15 +608,12 @@ void NovaDisplay::ShowBluetoothModal() {
             204, card_w - 20, 16, FONT_10, ble_conn ? lv_color_hex(0x86EFAC) : C_MUTED);
 
         MakeButton(
-            card, "BUKA CHRONCHI WATCH", 12, 244, card_w - 24, 32, lv_color_hex(0x0284C7),
+            card, "TUTUP", 12, 244, card_w - 24, 32, lv_color_hex(0x0284C7),
             lv_color_hex(0x38BDF8), lv_color_white(), FONT_12,
             [](lv_event_t* e) {
                 auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                 if (self) {
                     self->CloseBluetoothModal();
-                    if (self->GetCallbacks().switch_mode) {
-                        self->GetCallbacks().switch_mode(1);
-                    }
                 }
             },
             this);
@@ -640,15 +637,12 @@ void NovaDisplay::ShowBluetoothModal() {
             32, FONT_10, ble_conn ? lv_color_hex(0x86EFAC) : lv_color_hex(0x93C5FD));
 
         MakeButton(
-            card, "CHRONCHI WATCH", rx, 168, rw, 32, lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8),
+            card, "TUTUP", rx, 168, rw, 32, lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8),
             lv_color_white(), FONT_12,
             [](lv_event_t* e) {
                 auto* self = static_cast<NovaDisplay*>(lv_event_get_user_data(e));
                 if (self) {
                     self->CloseBluetoothModal();
-                    if (self->GetCallbacks().switch_mode) {
-                        self->GetCallbacks().switch_mode(1);
-                    }
                 }
             },
             this);

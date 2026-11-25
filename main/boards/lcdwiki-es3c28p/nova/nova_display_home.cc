@@ -62,10 +62,10 @@ void NovaDisplay::BuildHome() {
         // Baris Bawah (Y=134, H=56): 3 Tile Aplikasi presisi di tengah layar (margin kiri/kanan
         // 12px)
         const int tile_x[] = {12, 114, 216};
-        const char* tile_names[] = {"Wi-Fi", "Watch", "Apps"};
-        const IconKind tile_icons[] = {ICON_WIFI, ICON_CHRONOS, ICON_APPS};
+        const char* tile_names[] = {"Wi-Fi", "Navigasi", "Apps"};
+        const IconKind tile_icons[] = {ICON_WIFI, ICON_NAV, ICON_APPS};
         const lv_color_t tile_colors[] = {GetAppIconColor(8, ICON_WIFI),
-                                          GetAppIconColor(7, ICON_CHRONOS),
+                                          GetAppIconColor(2, ICON_NAV),
                                           GetAppIconColor(16, ICON_APPS)};
         for (int i = 0; i < 3; ++i) {
             lv_obj_t* tile = lv_btn_create(root);
@@ -79,7 +79,8 @@ void NovaDisplay::BuildHome() {
                 lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_WIFI);
                 lv_obj_add_event_cb(tile, OnNavClicked, LV_EVENT_CLICKED, this);
             } else if (i == 1) {
-                lv_obj_add_event_cb(tile, OnLaunchChronchi, LV_EVENT_CLICKED, this);
+                lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_NAV);
+                lv_obj_add_event_cb(tile, OnNavClicked, LV_EVENT_CLICKED, this);
             } else {
                 lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_APPS);
                 lv_obj_add_event_cb(tile, OnNavClicked, LV_EVENT_CLICKED, this);
@@ -100,10 +101,10 @@ void NovaDisplay::BuildHome() {
                    OnLaunchAiVoice, this);
 
         const int tile_x[] = {12, 88, 164};
-        const char* tile_names[] = {"Radio", "Watch", "Apps"};
-        const IconKind tile_icons[] = {ICON_RADIO, ICON_CHRONOS, ICON_APPS};
+        const char* tile_names[] = {"Radio", "Navigasi", "Apps"};
+        const IconKind tile_icons[] = {ICON_RADIO, ICON_NAV, ICON_APPS};
         const lv_color_t tile_colors[] = {GetAppIconColor(1, ICON_RADIO),
-                                          GetAppIconColor(7, ICON_CHRONOS),
+                                          GetAppIconColor(2, ICON_NAV),
                                           GetAppIconColor(16, ICON_APPS)};
         for (int i = 0; i < 3; ++i) {
             lv_obj_t* tile = lv_btn_create(root);
@@ -117,7 +118,8 @@ void NovaDisplay::BuildHome() {
                 lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_RADIO);
                 lv_obj_add_event_cb(tile, OnNavClicked, LV_EVENT_CLICKED, this);
             } else if (i == 1) {
-                lv_obj_add_event_cb(tile, OnLaunchChronchi, LV_EVENT_CLICKED, this);
+                lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_NAV);
+                lv_obj_add_event_cb(tile, OnNavClicked, LV_EVENT_CLICKED, this);
             } else {
                 lv_obj_set_user_data(tile, (void*)(intptr_t)PAGE_APPS);
                 lv_obj_add_event_cb(tile, OnNavClicked, LV_EVENT_CLICKED, this);
@@ -213,7 +215,7 @@ void NovaDisplay::BuildApps() {
             {"Notif HP", ICON_CHAT, C_CYAN, PAGE_NOTIF, -1, false},
             {"Cuaca HP", ICON_WEATHER, C_AMBER, PAGE_WEATHER, -1, false},
             {"Cari HP", ICON_PHONE, C_MINT, PAGE_PHONE, -1, false},
-            {"Smartwatch", ICON_CHRONOS, C_AMBER, PAGE_HOME, 0, false},
+            {"Info Sistem", ICON_CHIP, C_VIOLET, PAGE_SYSTEM, -1, false},
             {"Radio", ICON_RADIO, C_MINT, PAGE_RADIO, -1, false},
             {"Wi-Fi", ICON_WIFI, C_CYAN, PAGE_WIFI, -1, false},
             {"Audio", ICON_AUDIO, C_AMBER, PAGE_AUDIO, -1, false},
@@ -324,11 +326,11 @@ void NovaDisplay::BuildApps() {
         AppTile(list, 126, 144, "Cuaca HP", "Info Cuaca", ICON_WEATHER,
                 GetAppIconColor(5, ICON_WEATHER), PAGE_WEATHER);
 
-        // Row 4: Cari HP & Smartwatch Chronos
+        // Row 4: Cari HP & Informasi Sistem
         AppTile(list, 12, 204, "Cari HP", "Deringkan HP", ICON_PHONE,
                 GetAppIconColor(6, ICON_PHONE), PAGE_PHONE);
-        ChronchiTile(list, 126, 204, "Smartwatch", "Jam & Wajah", ICON_CHRONOS,
-                     GetAppIconColor(7, ICON_CHRONOS), 0);
+        AppTile(list, 126, 204, "Info Sistem", "Chip & Memori", ICON_CHIP,
+                GetAppIconColor(7, ICON_CHIP), PAGE_SYSTEM);
 
         // Row 5
         AppTile(list, 12, 264, "Wi-Fi", "Jaringan", ICON_WIFI, GetAppIconColor(8, ICON_WIFI),
@@ -668,12 +670,13 @@ void NovaDisplay::BuildQuick() {
         lv_obj_t* chr_btn = lv_btn_create(root);
         lv_obj_set_pos(chr_btn, 164, 124);
         lv_obj_set_size(chr_btn, 146, 76);
-        StyleButton(chr_btn, C_PANEL, C_AMBER, 12);
-        MakeIcon(chr_btn, ICON_CHRONOS, 10, 20, C_AMBER, 28);
-        MakeLabel(chr_btn, "Chronchi", 42, 12, 98, 20, FONT_14, C_TEXT);
-        MakeLabel(chr_btn, "Smartwatch BLE", 42, 32, 98, 14, FONT_10, C_MUTED);
-        MakeLabel(chr_btn, "BUKA WATCH >", 42, 50, 98, 14, FONT_10, C_AMBER);
-        lv_obj_add_event_cb(chr_btn, OnLaunchChronchi, LV_EVENT_CLICKED, this);
+        StyleButton(chr_btn, C_PANEL, C_MINT, 12);
+        MakeIcon(chr_btn, ICON_NAV, 10, 20, C_MINT, 28);
+        MakeLabel(chr_btn, "Navigasi", 42, 12, 98, 20, FONT_14, C_TEXT);
+        MakeLabel(chr_btn, "Google Maps", 42, 32, 98, 14, FONT_10, C_MUTED);
+        MakeLabel(chr_btn, "BUKA NAVIGASI >", 42, 50, 98, 14, FONT_10, C_MINT);
+        lv_obj_set_user_data(chr_btn, (void*)(intptr_t)PAGE_NAV);
+        lv_obj_add_event_cb(chr_btn, OnNavClicked, LV_EVENT_CLICKED, this);
     } else {
         // === PORTRAIT LAYOUT (240x320) ===
         MakeLabel(root, "AKSES PERANGKAT", 14, 42, 212, 16, FONT_12, C_MUTED);
@@ -748,8 +751,9 @@ void NovaDisplay::BuildQuick() {
         // Launcher buttons for Modes
         MakeButton(root, "XIAOZHI AI", 12, 226, 102, 48, C_PANEL, C_CYAN, C_CYAN, FONT_12,
                    OnLaunchAiVoice, this);
-        MakeButton(root, "CHRONCHI", 126, 226, 102, 48, C_PANEL, C_AMBER, C_AMBER, FONT_12,
-                   OnLaunchChronchi, this);
+        lv_obj_t* nav_btn = MakeButton(root, "NAVIGASI", 126, 226, 102, 48, C_PANEL, C_MINT, C_MINT, FONT_12,
+                   OnNavClicked, this);
+        lv_obj_set_user_data(nav_btn, (void*)(intptr_t)PAGE_NAV);
     }
 
     MakeBottomNav(root, PAGE_QUICK);

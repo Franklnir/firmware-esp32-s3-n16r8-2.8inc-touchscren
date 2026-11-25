@@ -454,8 +454,9 @@ void NovaDisplay::BuildChronos() {
         clock_label_ = MakeCenteredLabel(clk_card, time_text, 0, 20, 144, 38, FONT_28, C_TEXT);
         date_label_ = MakeCenteredLabel(clk_card, date_text, 0, 62, 144, 16, FONT_10, C_MUTED);
 
-        MakeButton(root, "⚡ BUKA SMARTWATCH", 10, 136, 144, 66, lv_color_hex(0x132238),
-                   lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), FONT_12, OnLaunchChronchi, this);
+        lv_obj_t* btn_nav = MakeButton(root, "🧭 BUKA NAVIGASI", 10, 136, 144, 66, lv_color_hex(0x132238),
+                   lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), FONT_12, OnNavClicked, this);
+        lv_obj_set_user_data(btn_nav, (void*)(intptr_t)PAGE_NAV);
 
         // Right Column (w=150): Pomodoro Timer card
         lv_obj_t* tcard = MakePanel(root, 160, 38, 150, 164, C_PANEL, C_BORDER, 10);
@@ -524,9 +525,10 @@ void NovaDisplay::BuildChronos() {
         MakeLabel(tcard, timer_running_ ? "Sesi fokus berjalan" : "Sesi fokus 25 menit", 12, 76,
                   110, 16, FONT_10, C_MUTED);
 
-        // Card / Button to launch Chronchi Smartwatch mode directly
-        MakeButton(root, "⚡ BUKA MODE SMARTWATCH", 12, 226, 216, 40, lv_color_hex(0x132238),
-                   lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), FONT_12, OnLaunchChronchi, this);
+        // Tombol pintasan langsung ke Navigasi Google Maps
+        lv_obj_t* btn_nav = MakeButton(root, "🧭 BUKA NAVIGASI GOOGLE MAPS", 12, 226, 216, 40, lv_color_hex(0x132238),
+                   lv_color_hex(0x0284C7), lv_color_hex(0x38BDF8), FONT_12, OnNavClicked, this);
+        lv_obj_set_user_data(btn_nav, (void*)(intptr_t)PAGE_NAV);
     }
 
     MakeBottomNav(root, PAGE_CHRONOS);
