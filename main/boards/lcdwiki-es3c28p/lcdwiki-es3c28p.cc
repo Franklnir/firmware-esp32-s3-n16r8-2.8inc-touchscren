@@ -451,29 +451,32 @@ public:
             fast_voltage_mv_ = raw_vbat_mv;
             slow_voltage_mv_ = raw_vbat_mv;
             baseline_voltage_mv_ = raw_vbat_mv;
-            trend_baseline_v_ = raw_vbat_mv;
             last_voltage_mv_ = (int)slow_voltage_mv_;
 
-            // Default saat boot: Baterai beroperasi normal (TIDAK sedang diisi daya)
-            // Ini mencegah baterai penuh (4.20V) yang tidak dicolok charger salah terdeteksi sebagai "charging".
-            is_charging_ = false;
-            max_charging_v_ = raw_vbat_mv;
+            // Deteksi cerdas saat boot:
+            // Jika tegangan saat booting >= 4180mV, hampir dipastikan sedang tercolok USB/charger,
+            // karena baterai tanpa charger di bawah beban ESP32+LCD (~200mA) akan langsung drop < 4150mV.
+            if (raw_vbat_mv >= 4180.0f) {
+                is_charging_ = true;
+            } else {
+                is_charging_ = false;
+            }
 
-            int comp_v = (int)slow_voltage_mv_;
+            int comp_v = GetCompensatedVoltageMv((int)slow_voltage_mv_, is_charging_);
             int init_pct = CalculateLiIonPercentage(comp_v);
 
             // Konsistensi Baterai Lintas Restart (NVS Persistence):
-            // Jangan biarkan persentase melompat saat perangkat di-restart!
+            // Pertahankan persentase baterai agar tidak melonjak atau anjlok saat reboot
             if (saved_soc_ >= 0 && saved_soc_ <= 100) {
-                // A. Baterai dicas saat mati? (tegangan naik signifikan > saved_soc_ + 8%)
-                if (init_pct > saved_soc_ + 8) {
+                // Jika dicas saat mati (tegangan naik signifikan > saved_soc_ + 10%)
+                if (init_pct > saved_soc_ + 10) {
                     displayed_percentage_ = init_pct;
                 }
-                // B. Baterai drop drastis / baterai diganti saat mati? (< saved_soc_ - 25%)
-                else if (init_pct < saved_soc_ - 25) {
+                // Jika baterai drop drastis / baterai diganti saat mati (< saved_soc_ - 20%)
+                else if (init_pct < saved_soc_ - 20) {
                     displayed_percentage_ = init_pct;
                 }
-                // C. Normal reboot / restart / sag tegangan: pertahankan nilai tersimpan agar 100% konsisten!
+                // Normal reboot / restart / sag tegangan: pertahankan nilai tersimpan agar 100% konsisten!
                 else {
                     displayed_percentage_ = saved_soc_;
                 }
@@ -481,8 +484,15 @@ public:
                 displayed_percentage_ = init_pct;
             }
 
+            // Inisialisasi trend buffer dengan tegangan awal
+            for (int i = 0; i < kTrendBufferSize; i++) {
+                trend_buffer_[i] = slow_voltage_mv_;
+            }
+            trend_buf_count_ = 1;
+            trend_buf_idx_ = 1;
+            last_sample_time_ms_ = now;
+
             last_jump_check_ms_ = now;
-            last_trend_check_ms_ = now;
             last_percent_step_ms_ = now;
             last_saved_soc_ = displayed_percentage_;
             ESP_LOGI("LCDWikiBattery", "Initial battery state: Vbat=%dmV, %s, SoC=%d%% (NVS Restored=%d%%)",
@@ -491,100 +501,157 @@ public:
         }
 
         // Layer 2: Dual EMA Filter
-        // Fast filter (alpha=0.40): Responsif untuk mendeteksi step jump colok/cabut charger
-        fast_voltage_mv_ = (0.40f * raw_vbat_mv) + (0.60f * fast_voltage_mv_);
-        // Slow filter (alpha=0.08): Sangat halus & stabil untuk tampilan UI
-        slow_voltage_mv_ = (0.08f * raw_vbat_mv) + (0.92f * slow_voltage_mv_);
+        // Fast filter (alpha=0.35): Responsif untuk mendeteksi lonjakan colok/cabut kabel USB
+        fast_voltage_mv_ = (0.35f * raw_vbat_mv) + (0.65f * fast_voltage_mv_);
+        // Slow filter (alpha=0.06): Sangat halus, menepis jitter Wi-Fi TX dan beban dinamik audio
+        slow_voltage_mv_ = (0.06f * raw_vbat_mv) + (0.94f * slow_voltage_mv_);
         last_voltage_mv_ = (int)slow_voltage_mv_;
 
-        // Update tegangan puncak saat proses pengisian
-        if (is_charging_) {
-            if (fast_voltage_mv_ > max_charging_v_) {
-                max_charging_v_ = fast_voltage_mv_;
-            }
-        }
-
-        // Layer 4B: Deteksi Lonjakan Colok / Cabut Charger (setiap 1.5 detik)
+        // Layer 3A: Deteksi Lonjakan Colok / Cabut Charger (Step Jump Detection setiap 1.5 detik)
+        // Karakteristik fisik ES3C28P:
+        // Colok USB: Arus cas TP4054 (+450mA) masuk + beban sistem (-200mA) beralih ke VBUS 5V
+        //            menghasilkan lonjakan tegangan instan +100mV s/d +200mV (minimal +70mV).
+        // Cabut USB: Arus cas hilang + baterai memikul beban sistem kembali
+        //            menghasilkan drop tegangan instan -100mV s/d -200mV (minimal -70mV).
         if (now - last_jump_check_ms_ >= 1500) {
             last_jump_check_ms_ = now;
             float delta_v = fast_voltage_mv_ - baseline_voltage_mv_;
 
             if (!is_charging_) {
-                // Lonjakan >= +40mV dalam 1.5 detik menandakan arus charger mulai masuk
-                if (delta_v >= 40.0f) {
-                    is_charging_ = true;
-                    max_charging_v_ = fast_voltage_mv_;
-                    last_percent_step_ms_ = now;
-                    ESP_LOGI("LCDWikiBattery", "⚡ Charger connected! DeltaV=+%.1fmV, Vbat=%dmV",
-                             delta_v, (int)slow_voltage_mv_);
+                // Ambang batas aman: +70mV (kebal terhadap fluktuasi Wi-Fi/audio yang hanya ~20-30mV)
+                if (delta_v >= 70.0f) {
+                    step_up_candidate_count_++;
+                    if (step_up_candidate_count_ >= 2) { // Konfirmasi 2 siklus (~3 detik)
+                        is_charging_ = true;
+                        step_up_candidate_count_ = 0;
+                        step_down_candidate_count_ = 0;
+                        last_percent_step_ms_ = now;
+                        baseline_voltage_mv_ = fast_voltage_mv_;
+                        ESP_LOGI("LCDWikiBattery", "⚡ Charger connected (Step Jump)! DeltaV=+%.1fmV, Vbat=%dmV",
+                                 delta_v, (int)slow_voltage_mv_);
+                    }
+                } else {
+                    step_up_candidate_count_ = 0;
+                    // Lacak baseline secara bertahap saat tidak ada lonjakan
+                    baseline_voltage_mv_ = (0.25f * fast_voltage_mv_) + (0.75f * baseline_voltage_mv_);
                 }
             } else {
-                // Deteksi charger dicabut:
-                // 1. Penurunan drastis <= -30mV dalam 1.5 detik
-                // 2. ATAU tegangan turun >= 28mV di bawah puncak saat dicas (max_charging_v_)
-                //    (karena charger berhenti menahan tegangan, drop seketika)
-                if (delta_v <= -30.0f || (slow_voltage_mv_ < max_charging_v_ - 28.0f)) {
-                    is_charging_ = false;
-                    last_percent_step_ms_ = now;
-                    ESP_LOGI("LCDWikiBattery", "🔋 Charger disconnected! DeltaV=%.1fmV, Vbat=%dmV (Peak was %dmV)",
-                             delta_v, (int)slow_voltage_mv_, (int)max_charging_v_);
+                // Cabut kabel: drop instan <= -70mV
+                if (delta_v <= -70.0f) {
+                    step_down_candidate_count_++;
+                    if (step_down_candidate_count_ >= 2) { // Konfirmasi 2 siklus (~3 detik)
+                        is_charging_ = false;
+                        step_down_candidate_count_ = 0;
+                        step_up_candidate_count_ = 0;
+                        last_percent_step_ms_ = now;
+                        baseline_voltage_mv_ = fast_voltage_mv_;
+                        ESP_LOGI("LCDWikiBattery", "🔋 Charger disconnected (Step Drop)! DeltaV=%.1fmV, Vbat=%dmV",
+                                 delta_v, (int)slow_voltage_mv_);
+                    }
+                } else {
+                    step_down_candidate_count_ = 0;
+                    // Lacak baseline secara bertahap saat sedang charging
+                    baseline_voltage_mv_ = (0.25f * fast_voltage_mv_) + (0.75f * baseline_voltage_mv_);
                 }
             }
-            baseline_voltage_mv_ = fast_voltage_mv_;
         }
 
-        // Layer 4B-2: Analisis Tren Jangka Menengah (setiap 8 detik)
-        // Mencegah status charging 'nyangkut' jika charger dicabut pelan atau saat tegangan turun
-        if (now - last_trend_check_ms_ >= 8000) {
-            last_trend_check_ms_ = now;
-            float trend = fast_voltage_mv_ - trend_baseline_v_;
+        // Layer 3B: Windowed Trend Analysis Buffer (Algoritma Resmi adc_battery_estimation)
+        // Merekam sampel setiap 1.5 detik ke dalam circular ring buffer ukuran 12 (rentang waktu ~18 detik).
+        if (now - last_sample_time_ms_ >= 1500) {
+            last_sample_time_ms_ = now;
+            trend_buffer_[trend_buf_idx_] = slow_voltage_mv_;
+            trend_buf_idx_ = (trend_buf_idx_ + 1) % kTrendBufferSize;
+            if (trend_buf_count_ < kTrendBufferSize) {
+                trend_buf_count_++;
+            }
 
-            if (is_charging_) {
-                // Jika sedang dicas tapi tegangan justru turun >= 12mV dalam 8 detik,
-                // berarti charger SUDAH DICABUT dan baterai sedang terdiscas (discharging)!
-                if (trend <= -12.0f) {
-                    is_charging_ = false;
-                    last_percent_step_ms_ = now;
-                    ESP_LOGI("LCDWikiBattery", "🔋 Discharging confirmed by negative trend: Trend=%.1fmV/8s, Vbat=%dmV",
-                             trend, (int)slow_voltage_mv_);
+            // Lakukan analisis tren jika buffer sudah cukup terisi (>= 8 sampel / ~12 detik)
+            if (trend_buf_count_ >= 8) {
+                int increasing_count = 0;
+                int decreasing_count = 0;
+                // Deadband 4mV untuk menyaring noise mikro ADC
+                for (int i = 1; i < trend_buf_count_; i++) {
+                    int curr_idx = (trend_buf_idx_ - 1 - (trend_buf_count_ - 1 - i) + kTrendBufferSize * 2) % kTrendBufferSize;
+                    int prev_idx = (trend_buf_idx_ - 1 - (trend_buf_count_ - i) + kTrendBufferSize * 2) % kTrendBufferSize;
+                    float diff = trend_buffer_[curr_idx] - trend_buffer_[prev_idx];
+                    if (diff >= 4.0f) {
+                        increasing_count++;
+                    } else if (diff <= -4.0f) {
+                        decreasing_count++;
+                    }
                 }
-            } else {
-                // Jika tidak sedang dicas tapi tegangan naik terus menerus (>= +20mV dalam 8 detik),
-                // berarti charger sedang mengisi daya (misalnya dicolok saat perangkat baru nyala)
-                if (trend >= 20.0f && fast_voltage_mv_ > 3600.0f) {
-                    is_charging_ = true;
-                    max_charging_v_ = fast_voltage_mv_;
-                    last_percent_step_ms_ = now;
-                    ESP_LOGI("LCDWikiBattery", "⚡ Charging confirmed by positive trend: Trend=+%.1fmV/8s, Vbat=%dmV",
-                             trend, (int)slow_voltage_mv_);
+
+                // Hitung total selisih tegangan dari sampel terlama ke terbaru
+                int oldest_idx = (trend_buf_idx_ - trend_buf_count_ + kTrendBufferSize) % kTrendBufferSize;
+                int newest_idx = (trend_buf_idx_ - 1 + kTrendBufferSize) % kTrendBufferSize;
+                float net_trend = trend_buffer_[newest_idx] - trend_buffer_[oldest_idx];
+
+                if (!is_charging_) {
+                    // Jika tren kenaikan konsisten kuat (>= 6 perbandingan) dan net kenaikan >= +25mV
+                    if (increasing_count >= 6 && net_trend >= 25.0f && slow_voltage_mv_ > 3600.0f) {
+                        is_charging_ = true;
+                        baseline_voltage_mv_ = fast_voltage_mv_;
+                        last_percent_step_ms_ = now;
+                        ESP_LOGI("LCDWikiBattery", "⚡ Charging confirmed by sustained trend: Inc=%d, Dec=%d, Net=+%.1fmV, Vbat=%dmV",
+                                 increasing_count, decreasing_count, net_trend, (int)slow_voltage_mv_);
+                    }
+                } else {
+                    // Jika tren penurunan konsisten kuat (>= 6 perbandingan), net penurunan <= -25mV,
+                    // DAN tegangan sudah turun di bawah 4150mV (bukan fase CV yang sedang menahan 4.2V)
+                    if (decreasing_count >= 6 && net_trend <= -25.0f && slow_voltage_mv_ < 4150.0f) {
+                        is_charging_ = false;
+                        baseline_voltage_mv_ = fast_voltage_mv_;
+                        last_percent_step_ms_ = now;
+                        ESP_LOGI("LCDWikiBattery", "🔋 Discharging confirmed by sustained trend: Inc=%d, Dec=%d, Net=%.1fmV, Vbat=%dmV",
+                                 increasing_count, decreasing_count, net_trend, (int)slow_voltage_mv_);
+                    }
                 }
             }
-            trend_baseline_v_ = fast_voltage_mv_;
         }
 
-        // Layer 4C: Slew-Rate Limiter (Anti-Lonjakan Persentase)
+        // Layer 3C: Absolute Voltage Anchors (Proteksi Batas Fisik)
+        // 1. Jika tegangan >= 4220mV, secara fisik PASTI terhubung ke charger 5V (Li-Po 1S tidak bisa > 4.20V sendiri)
+        if (slow_voltage_mv_ >= 4220.0f && !is_charging_) {
+            is_charging_ = true;
+            last_percent_step_ms_ = now;
+            ESP_LOGI("LCDWikiBattery", "⚡ High-voltage anchor: Vbat=%dmV >= 4220mV -> Charging = true", (int)slow_voltage_mv_);
+        }
+        // 2. Jika tegangan <= 3500mV dan tidak ada tren naik, baterai habis -> Charging = false
+        if (slow_voltage_mv_ <= 3500.0f && is_charging_ && trend_buf_count_ >= 6) {
+            int oldest_idx = (trend_buf_idx_ - trend_buf_count_ + kTrendBufferSize) % kTrendBufferSize;
+            int newest_idx = (trend_buf_idx_ - 1 + kTrendBufferSize) % kTrendBufferSize;
+            if (trend_buffer_[newest_idx] <= trend_buffer_[oldest_idx]) {
+                is_charging_ = false;
+                last_percent_step_ms_ = now;
+                ESP_LOGI("LCDWikiBattery", "🔋 Low-voltage anchor: Vbat=%dmV <= 3500mV -> Charging = false", (int)slow_voltage_mv_);
+            }
+        }
+
+        // Layer 4: Slew-Rate Limiter (Anti-Lonjakan Persentase & Konsistensi UI)
         int comp_v = GetCompensatedVoltageMv((int)slow_voltage_mv_, is_charging_);
         int target_perc = CalculateLiIonPercentage(comp_v);
 
         if (is_charging_) {
-            // SAAT DICAS: Persentase TIDAK BOLEH turun, dan hanya boleh naik maksimal +1% tiap 15 detik
+            // SAAT DICAS: Persentase TIDAK BOLEH turun (monotonik non-decreasing seperti resmi XiaoZhi)
             if (target_perc > displayed_percentage_) {
+                // Naik maksimal +1% tiap 15 detik agar halus dan stabil
                 if (now - last_percent_step_ms_ >= 15000) {
                     displayed_percentage_++;
                     last_percent_step_ms_ = now;
                 }
             }
         } else {
-            // SAAT PAKAI BATERAI: Persentase TIDAK BOLEH naik sendiri.
-            // Turun maksimal 1% tiap 10 detik untuk meredam voltage sag saat Wi-Fi tx atau audio keras
+            // SAAT DISCHARGING: Persentase TIDAK BOLEH naik sendiri karena noise sesaat
             if (target_perc < displayed_percentage_) {
+                // Turun maksimal -1% tiap 10 detik untuk meredam voltage sag saat Wi-Fi TX / audio keras
                 if (now - last_percent_step_ms_ >= 10000) {
                     displayed_percentage_--;
                     last_percent_step_ms_ = now;
                 }
-            } else if (target_perc > displayed_percentage_ + 4) {
-                // Recovery jika beban berat berakhir: naik sangat lambat (30 detik per 1%)
-                if (now - last_percent_step_ms_ >= 30000) {
+            } else if (target_perc >= displayed_percentage_ + 8) {
+                // Pemulihan lambat jika beban berat telah selesai (misal setelah volume audio tinggi berhenti)
+                if (now - last_percent_step_ms_ >= 45000) {
                     displayed_percentage_++;
                     last_percent_step_ms_ = now;
                 }
@@ -654,6 +721,8 @@ public:
     }
 
 private:
+    static constexpr int kTrendBufferSize = 12; // 12 sampel * 1.5s = ~18 detik jendela geser
+
     adc_unit_t adc_unit_;
     adc_channel_t adc_channel_;
     float divider_ratio_;
@@ -670,12 +739,17 @@ private:
     int displayed_percentage_ = -1;
     bool is_charging_ = false;
     bool initial_detected_ = false;
-    float max_charging_v_ = 0.0f;
-    float trend_baseline_v_ = 0.0f;
+
+    // Windowed trend analysis buffer & step detection
+    float trend_buffer_[kTrendBufferSize] = {0.0f};
+    int trend_buf_count_ = 0;
+    int trend_buf_idx_ = 0;
+    uint32_t last_sample_time_ms_ = 0;
+    int step_up_candidate_count_ = 0;
+    int step_down_candidate_count_ = 0;
 
     uint32_t last_update_ms_ = 0;
     uint32_t last_jump_check_ms_ = 0;
-    uint32_t last_trend_check_ms_ = 0;
     uint32_t last_percent_step_ms_ = 0;
     uint32_t last_nvs_save_ms_ = 0;
     int last_saved_soc_ = -1;
