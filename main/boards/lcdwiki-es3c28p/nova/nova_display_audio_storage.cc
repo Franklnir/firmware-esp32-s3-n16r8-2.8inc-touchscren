@@ -283,7 +283,7 @@ void NovaDisplay::BuildAudio() {
         lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_bottom(list, 60, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 80, LV_PART_MAIN);
         lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
@@ -522,6 +522,8 @@ void NovaDisplay::BuildAudio() {
         lv_label_set_text(p_lbl, p_str);
         lv_obj_set_style_text_font(p_lbl, FONT_12, 0);
         lv_obj_set_style_text_color(p_lbl, C_CYAN, 0);
+        lv_label_set_long_mode(p_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_width(p_lbl, 200);
         lv_obj_center(p_lbl);
         lv_obj_add_event_cb(
             prev_btn,
@@ -864,7 +866,7 @@ void NovaDisplay::BuildFiles() {
         lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_bottom(list, 52, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 80, LV_PART_MAIN);
         lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
@@ -896,12 +898,14 @@ void NovaDisplay::BuildFiles() {
                 snprintf(cap_buf, sizeof(cap_buf), "Kapasitas: %llu MB (Bebas: %llu MB)",
                          (unsigned long long)sd.total_mb, (unsigned long long)sd.free_mb);
             }
-            MakeLabel(card, cap_buf, 8, 62, 192, 16, FONT_10, C_MUTED);
+            lv_obj_t* cap_lbl = MakeLabel(card, cap_buf, 8, 62, 192, 16, FONT_10, C_MUTED);
+            lv_label_set_long_mode(cap_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
             char file_count_str[64];
             snprintf(file_count_str, sizeof(file_count_str),
                      "Status: %u berkas terindeks di /sdcard", (unsigned)sd.files.size());
-            MakeLabel(card, file_count_str, 8, 78, 192, 16, FONT_10, C_CYAN);
+            lv_obj_t* cnt_lbl = MakeLabel(card, file_count_str, 8, 78, 192, 16, FONT_10, C_CYAN);
+            lv_label_set_long_mode(cnt_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
             MakeButton(
                 card, "SEGARKAN", 8, 96, 92, 24, C_PANEL_2, C_BORDER, C_TEXT, FONT_10,
@@ -1225,7 +1229,10 @@ void NovaDisplay::BuildBattery() {
         // === LANDSCAPE LAYOUT (320x240) ===
         // Left Column (x=10, w=146): Status Card + Style Switcher
         lv_obj_t* card = MakePanel(root, 10, 38, 146, 76, C_PANEL, C_BORDER, 10);
-        battery_card_icon_ = MakeIcon(card, ICON_BATTERY, 8, 8, chg ? C_CYAN : (level <= 20 ? C_RED : C_MINT), 22);
+        battery_card_icon_ = lv_label_create(card);
+        lv_obj_set_pos(battery_card_icon_, 8, 8);
+        lv_obj_set_style_text_font(battery_card_icon_, FONT_ICON, LV_PART_MAIN);
+        lv_obj_set_style_text_color(battery_card_icon_, chg ? C_CYAN : (level <= 20 ? C_RED : C_MINT), LV_PART_MAIN);
         lv_label_set_text(battery_card_icon_, NovaGetBatterySymbol(level, chg));
         char pct_str[32];
         snprintf(pct_str, sizeof(pct_str), "%d%%", level);
@@ -1304,10 +1311,23 @@ void NovaDisplay::BuildBattery() {
         lv_label_set_long_mode(l4, LV_LABEL_LONG_SCROLL_CIRCULAR);
     } else {
         // === PORTRAIT LAYOUT (240x320) ===
-        MakeLabel(root, "STATUS BATERAI", 14, 38, 212, 13, FONT_10, C_MUTED);
+        lv_obj_t* list = lv_obj_create(root);
+        lv_obj_set_pos(list, 0, 36);
+        lv_obj_set_size(list, 240, height_ - 67);
+        lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_bottom(list, 70, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
-        lv_obj_t* card = MakePanel(root, 12, 54, 216, 78, C_PANEL, C_BORDER, 10);
-        battery_card_icon_ = MakeIcon(card, ICON_BATTERY, 8, 8, chg ? C_CYAN : (level <= 20 ? C_RED : C_MINT), 24);
+        MakeLabel(list, "STATUS BATERAI", 14, 4, 212, 13, FONT_10, C_MUTED);
+
+        lv_obj_t* card = MakePanel(list, 12, 20, 216, 78, C_PANEL, C_BORDER, 10);
+        battery_card_icon_ = lv_label_create(card);
+        lv_obj_set_pos(battery_card_icon_, 8, 8);
+        lv_obj_set_style_text_font(battery_card_icon_, FONT_ICON, LV_PART_MAIN);
+        lv_obj_set_style_text_color(battery_card_icon_, chg ? C_CYAN : (level <= 20 ? C_RED : C_MINT), LV_PART_MAIN);
         lv_label_set_text(battery_card_icon_, NovaGetBatterySymbol(level, chg));
         char pct_str[32];
         snprintf(pct_str, sizeof(pct_str), "%d%%", level);
@@ -1331,12 +1351,12 @@ void NovaDisplay::BuildBattery() {
         battery_raw_label_ = MakeLabel(card, raw_str, 8, 59, 200, 14, FONT_10, C_MUTED);
         lv_label_set_long_mode(battery_raw_label_, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
-        MakeLabel(root, "GAYA TAMPILAN STATUS BAR", 14, 138, 212, 13, FONT_10, C_MUTED);
+        MakeLabel(list, "GAYA TAMPILAN STATUS BAR", 14, 106, 212, 13, FONT_10, C_MUTED);
 
         for (int i = 0; i < 3; ++i) {
             bool selected = (bat_style_ == i);
-            lv_obj_t* s_btn = lv_btn_create(root);
-            lv_obj_set_pos(s_btn, 12 + i * 72, 154);
+            lv_obj_t* s_btn = lv_btn_create(list);
+            lv_obj_set_pos(s_btn, 12 + i * 72, 122);
             lv_obj_set_size(s_btn, 68, 28);
             StyleButton(s_btn, selected ? C_PANEL_2 : C_PANEL, selected ? C_CYAN : C_BORDER, 8);
             if (selected) {
@@ -1368,9 +1388,7 @@ void NovaDisplay::BuildBattery() {
         }
 
         // Dedicated "INFORMASI RANGKAIAN" Card Panel
-        // Starts at y=188, height=88 -> ends at 276 (Bottom Nav starts at 284, perfectly visible
-        // and spacious!)
-        lv_obj_t* icard = MakePanel(root, 12, 188, 216, 88, C_PANEL, C_BORDER, 10);
+        lv_obj_t* icard = MakePanel(list, 12, 158, 216, 92, C_PANEL, C_BORDER, 10);
         MakeLabel(icard, "INFORMASI RANGKAIAN & DAYA", 8, 5, 200, 14, FONT_10, C_CYAN);
 
         lv_obj_t* cl1 =

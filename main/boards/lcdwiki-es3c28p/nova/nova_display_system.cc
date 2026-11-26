@@ -619,8 +619,8 @@ void NovaDisplay::BuildPinLab() {
         lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_bottom(list, 36, LV_PART_MAIN);
-        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+        lv_obj_set_style_pad_bottom(list, 50, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
         for (size_t i = 0; i < num_groups; ++i) {
@@ -638,8 +638,8 @@ void NovaDisplay::BuildPinLab() {
         lv_obj_set_style_bg_opa(list, LV_OPA_TRANSP, LV_PART_MAIN);
         lv_obj_set_style_border_width(list, 0, LV_PART_MAIN);
         lv_obj_set_style_pad_all(list, 0, LV_PART_MAIN);
-        lv_obj_set_style_pad_bottom(list, 52, LV_PART_MAIN);
-        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+        lv_obj_set_style_pad_bottom(list, 80, LV_PART_MAIN);
+        lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
         lv_obj_set_scroll_dir(list, LV_DIR_VER);
 
         int cur_y = 4;

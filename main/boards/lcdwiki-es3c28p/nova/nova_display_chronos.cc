@@ -732,7 +732,8 @@ void NovaDisplay::BuildNav() {
 
         // Jarak Belokan Berikutnya
         std::string dist_str = dist.empty() ? "-- m" : dist;
-        MakeLabel(card, dist_str.c_str(), 70, 6, content_w - 78, 30, FONT_28, C_CYAN);
+        lv_obj_t* dist_lbl = MakeLabel(card, dist_str.c_str(), 70, 6, content_w - 78, 30, FONT_28, C_CYAN);
+        lv_label_set_long_mode(dist_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         // Status GPS Aktif
         std::string status_txt = active ? "● Rute GPS Aktif" : "Menunggu Rute...";
@@ -763,16 +764,19 @@ void NovaDisplay::BuildNav() {
         // Teks ETA dikecilkan (FONT_12) agar pas dan rapi tanpa terpotong
         std::string eta_clean = eta.empty() ? "--:--" : eta;
         std::string eta_txt = "ETA: " + eta_clean;
-        MakeLabel(p_left, eta_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, C_AMBER);
+        lv_obj_t* eta_lbl = MakeLabel(p_left, eta_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, C_AMBER);
+        lv_label_set_long_mode(eta_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         std::string dur_txt = dur.empty() ? "-- mnt" : dur;
-        MakeLabel(p_left, dur_txt.c_str(), 6, 40, half_w - 12, 16, FONT_10, C_MINT);
+        lv_obj_t* dur_lbl = MakeLabel(p_left, dur_txt.c_str(), 6, 40, half_w - 12, 16, FONT_10, C_MINT);
+        lv_label_set_long_mode(dur_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         // Panel Kanan: Kecepatan & Status
         lv_obj_t* p_right = MakePanel(tcard, 10 + half_w, 6, half_w, 64, C_PANEL_2, C_BORDER, 8);
         MakeLabel(p_right, "KECEPATAN", 6, 4, half_w - 12, 14, FONT_10, C_MUTED);
         std::string spd_txt = spd.empty() ? "-- km/h" : spd;
-        MakeLabel(p_right, spd_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, C_CYAN);
+        lv_obj_t* spd_lbl = MakeLabel(p_right, spd_txt.c_str(), 6, 20, half_w - 12, 18, FONT_12, C_CYAN);
+        lv_label_set_long_mode(spd_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
         MakeLabel(p_right, active ? "GPS Live" : "Standby", 6, 40, half_w - 12, 16, FONT_10, C_MUTED);
 
     } else {
@@ -802,6 +806,7 @@ void NovaDisplay::BuildNav() {
         std::string dist_str = dist.empty() ? "-- m" : dist;
         lv_obj_t* dist_lbl = MakeLabel(card, dist_str.c_str(), 68, 6, 100, 30, FONT_24, C_TEXT);
         lv_obj_set_style_text_color(dist_lbl, C_CYAN, 0);
+        lv_label_set_long_mode(dist_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         std::string status_txt = active ? "● Rute GPS Aktif" : "Menunggu Rute...";
         MakeLabel(card, status_txt.c_str(), 68, 36, 100, 16, FONT_10, active ? C_MINT : C_MUTED);
@@ -820,15 +825,18 @@ void NovaDisplay::BuildNav() {
         lv_obj_t* tcard = MakePanel(root, 188, 36, 124, 166, C_PANEL, C_BORDER, 10);
         MakeLabel(tcard, "ESTIMASI TIBA", 8, 8, 108, 14, FONT_10, C_MUTED);
         std::string eta_txt = "ETA: " + (eta.empty() ? "--:--" : eta);
-        MakeLabel(tcard, eta_txt.c_str(), 8, 24, 108, 18, FONT_12, C_AMBER);
+        lv_obj_t* eta_lbl = MakeLabel(tcard, eta_txt.c_str(), 8, 24, 108, 18, FONT_12, C_AMBER);
+        lv_label_set_long_mode(eta_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         MakeLabel(tcard, "SISA WAKTU", 8, 54, 108, 14, FONT_10, C_MUTED);
         std::string dur_txt = dur.empty() ? "-- mnt" : dur;
-        MakeLabel(tcard, dur_txt.c_str(), 8, 68, 108, 18, FONT_12, C_MINT);
+        lv_obj_t* dur_lbl = MakeLabel(tcard, dur_txt.c_str(), 8, 68, 108, 18, FONT_12, C_MINT);
+        lv_label_set_long_mode(dur_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
         MakeLabel(tcard, "KECEPATAN", 8, 98, 108, 14, FONT_10, C_MUTED);
         std::string spd_txt = spd.empty() ? "-- km/h" : spd;
-        MakeLabel(tcard, spd_txt.c_str(), 8, 112, 108, 18, FONT_12, C_CYAN);
+        lv_obj_t* spd_lbl = MakeLabel(tcard, spd_txt.c_str(), 8, 112, 108, 18, FONT_12, C_CYAN);
+        lv_label_set_long_mode(spd_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
     }
 
     MakeBottomNav(root, PAGE_NAV);
@@ -1036,9 +1044,9 @@ void NovaDisplay::BuildNotif() {
             lv_obj_t* s_lbl = MakeLabel(ncard, title.empty() ? "(Tanpa Subjek)" : title.c_str(), 10, 28, content_w - 20, 20, FONT_14, C_TEXT);
             lv_label_set_long_mode(s_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
-            // Body
-            lv_obj_t* b_lbl = MakeLabel(ncard, msg.empty() ? "(Pesan kosong)" : msg.c_str(), 10, 48, content_w - 76, 34, FONT_12, C_MUTED);
-            lv_label_set_long_mode(b_lbl, LV_LABEL_LONG_DOT);
+            // Body: Marquee continuous scroll so long messages move and are fully readable
+            lv_obj_t* b_lbl = MakeLabel(ncard, msg.empty() ? "(Pesan kosong)" : msg.c_str(), 10, 48, content_w - 76, 20, FONT_12, C_MUTED);
+            lv_label_set_long_mode(b_lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
             // Tap cue to indicate clickability
             MakeLabel(ncard, "Detail >", content_w - 52, 64, 48, 14, FONT_10, lv_color_hex(0x38BDF8));
